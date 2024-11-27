@@ -1,0 +1,14 @@
+.idea/
+.vscode/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+.env
+.DS_Store
+vendor/
+/firebase-credentials.json
+/logs/
