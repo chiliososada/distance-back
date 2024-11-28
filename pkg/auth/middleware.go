@@ -49,7 +49,8 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 将用户信息存储在上下文中
-		c.Set(AuthUserKey, decodedToken)
+		authUser := NewAuthUserFromToken(decodedToken) // 使用 NewAuthUserFromToken 创建认证用户
+		c.Set(AuthUserKey, authUser)                   // 存储 AuthUser 实例
 		c.Next()
 	}
 }

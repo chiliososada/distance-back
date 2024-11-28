@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"DistanceBack_v1/config"
+	"DistanceBack_v1/pkg/auth" // 导入 auth 包
 	"DistanceBack_v1/pkg/logger"
 
 	"cloud.google.com/go/storage"
-	firebase "firebase.google.com/go/v4"
-	"google.golang.org/api/option"
 )
 
 // Storage 定义存储接口
@@ -35,34 +34,23 @@ var defaultStorage Storage
 
 // InitStorage 初始化存储服务
 func InitStorage(cfg *config.FirebaseConfig) error {
-	ctx := context.Background()
-
-	// 初始化 Firebase App
-	opt := option.WithCredentialsFile(cfg.CredentialsFile)
-	app, err := firebase.NewApp(ctx, nil, opt)
-	if err != nil {
-		return fmt.Errorf("failed to initialize firebase app: %v", err)
-	}
-
-	// 获取 Storage 客户端
-	client, err := app.Storage(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage client: %v", err)
+	// 获取已初始化的 Storage 客户端
+	storageClient := auth.GetStorageClient()
+	if storageClient == nil {
+		return fmt.Errorf("firebase storage client not initialized")
 	}
 
 	// 获取默认 bucket
-	bucket, err := client.DefaultBucket()
+	bucket, err := storageClient.Bucket(cfg.StorageBucket)
 	if err != nil {
-		return fmt.Errorf("failed to get default bucket: %v", err)
+		return fmt.Errorf("failed to get bucket: %v", err)
 	}
 
-	// 从配置中获取 bucket 名称
-	bucketName := cfg.StorageBucket
-
+	// 创建 Firebase Storage 实例
 	defaultStorage = &FirebaseStorage{
 		bucket:     bucket,
-		bucketName: bucketName,
-		baseURL:    fmt.Sprintf("https://storage.googleapis.com/%s", bucketName),
+		bucketName: cfg.StorageBucket,
+		baseURL:    fmt.Sprintf("https://storage.googleapis.com/%s", cfg.StorageBucket),
 	}
 
 	logger.Info("Firebase Storage initialized successfully")

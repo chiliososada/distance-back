@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"DistanceBack_v1/internal/api/request"
 	"DistanceBack_v1/internal/model"
 	"DistanceBack_v1/internal/service"
 	"DistanceBack_v1/pkg/auth"
 	"DistanceBack_v1/pkg/logger"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,18 +31,33 @@ type UpdateLocationRequest struct {
 
 // RegisterUser 注册用户
 func (h *Handler) RegisterUser(c *gin.Context) {
-	// 从上下文获取Firebase用户信息
-	firebaseUser, exists := c.Get("firebase_user")
-	if !exists {
+	var req request.RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Error("请求数据绑定失败", logger.Any("error", err))
+		Error(c, service.ErrInvalidRequest)
+		return
+	}
+
+	token := c.GetHeader("Authorization")
+	if token == "" {
+		logger.Error("未找到Authorization header")
 		Error(c, service.ErrUnauthorized)
 		return
 	}
 
-	user, err := h.userService.RegisterOrUpdateUser(c, firebaseUser.(*auth.AuthUser))
+	decodedToken, err := auth.VerifyIDToken(c.Request.Context(), strings.TrimPrefix(token, "Bearer "))
 	if err != nil {
-		logger.Error("Failed to register user",
+		logger.Error("Firebase token验证失败", logger.Any("error", err))
+		Error(c, service.ErrUnauthorized)
+		return
+	}
+
+	authUser := auth.NewAuthUserFromToken(decodedToken)
+	user, err := h.userService.RegisterOrUpdateUser(c, authUser)
+	if err != nil {
+		logger.Error("用户注册失败",
 			logger.Any("error", err),
-			logger.Any("firebase_user", firebaseUser))
+			logger.Any("auth_user", authUser))
 		Error(c, err)
 		return
 	}

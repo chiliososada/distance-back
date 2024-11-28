@@ -41,6 +41,7 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 		user = &model.User{
 			Nickname:            firebaseUser.DisplayName,
 			AvatarURL:           firebaseUser.PhotoURL,
+			Gender:              "other", // 设置默认性别
 			Status:              model.UserStatusActive,
 			PrivacyLevel:        model.PrivacyPublic,
 			NotificationEnabled: true,
@@ -59,7 +60,8 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 			FirebaseUID:  firebaseUser.UID,
 			Email:        utils.NewNullString(firebaseUser.Email),
 			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
-			LastSignInAt: utils.TimePtr(time.Now()), // 转换为 *time.Time
+			LastSignInAt: utils.TimePtr(time.Now()),
+			AuthProvider: "password", // 添加认证方式
 		}
 
 		if err := s.userRepo.CreateAuthentication(ctx, auth); err != nil {
@@ -84,7 +86,8 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 			FirebaseUID:  firebaseUser.UID,
 			Email:        utils.NewNullString(firebaseUser.Email),
 			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
-			LastSignInAt: utils.TimePtr(time.Now()), // 转换为 *time.Time
+			LastSignInAt: utils.TimePtr(time.Now()),
+			AuthProvider: "password",
 		}
 
 		if err := s.userRepo.UpdateAuthentication(ctx, auth); err != nil {
