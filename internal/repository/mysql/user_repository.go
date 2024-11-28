@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"DistanceBack_v1/internal/model"
-	"DistanceBack_v1/internal/repository"
+	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/internal/repository"
 
 	"gorm.io/gorm"
 )

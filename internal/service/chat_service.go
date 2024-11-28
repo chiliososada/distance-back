@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"DistanceBack_v1/internal/model"
-	"DistanceBack_v1/internal/repository"
-	"DistanceBack_v1/pkg/logger"
-	"DistanceBack_v1/pkg/storage"
+	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/internal/repository"
+	"github.com/chiliososada/distance-back/pkg/logger"
+	"github.com/chiliososada/distance-back/pkg/storage"
 )
 
 type ChatService struct {

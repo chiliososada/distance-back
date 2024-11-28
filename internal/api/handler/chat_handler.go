@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"DistanceBack_v1/internal/model"
-	"DistanceBack_v1/internal/service"
+	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/internal/service"
 
 	"github.com/gin-gonic/gin"
 )

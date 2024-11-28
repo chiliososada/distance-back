@@ -1,9 +1,10 @@
 package router
 
 import (
-	"DistanceBack_v1/internal/api/handler"
-	"DistanceBack_v1/internal/middleware"
 	"time"
+
+	"github.com/chiliososada/distance-back/internal/api/handler"
+	"github.com/chiliososada/distance-back/internal/middleware"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -37,11 +38,10 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	// API 版本组
 	v1 := r.Group("/api/v1")
 
-	// 认证相关路由 - 不需要认证
+	// 认证相关路由
 	auth := v1.Group("/auth")
 	{
-		auth.POST("/register", h.RegisterUser)
-		// Firebase认证相关的其他路由...
+		auth.POST("/register", middleware.AuthRequired(), h.RegisterUser)
 	}
 
 	// 需要认证的路由组

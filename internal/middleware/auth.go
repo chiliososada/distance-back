@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"DistanceBack_v1/pkg/auth"
+	"github.com/chiliososada/distance-back/pkg/auth"
 
 	"github.com/gin-gonic/gin"
 )

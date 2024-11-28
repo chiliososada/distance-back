@@ -3,9 +3,9 @@ package handler
 import (
 	"time"
 
-	"DistanceBack_v1/internal/model"
-	"DistanceBack_v1/internal/service"
-	"DistanceBack_v1/pkg/logger"
+	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/internal/service"
+	"github.com/chiliososada/distance-back/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )

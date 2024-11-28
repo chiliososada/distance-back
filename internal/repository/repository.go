@@ -1,8 +1,9 @@
 package repository
 
 import (
-	"DistanceBack_v1/internal/model"
 	"context"
+
+	"github.com/chiliososada/distance-back/internal/model"
 )
 
 // UserRepository 用户仓储接口

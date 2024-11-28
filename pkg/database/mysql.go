@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"DistanceBack_v1/config"
-	pkgLogger "DistanceBack_v1/pkg/logger"
+	"github.com/chiliososada/distance-back/config"
+	pkgLogger "github.com/chiliososada/distance-back/pkg/logger"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

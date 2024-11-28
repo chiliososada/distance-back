@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"DistanceBack_v1/config"
-	"DistanceBack_v1/pkg/logger"
+	"github.com/chiliososada/distance-back/config"
+	"github.com/chiliososada/distance-back/pkg/logger"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
@@ -20,10 +20,15 @@ var (
 	firebaseApp     *firebase.App
 )
 
-// InitFirebase 初始化Firebase
+// GetStorage 获取 Storage 客户端
+func GetStorageClient() *storage.Client {
+	return firebaseStorage
+}
+
+// InitFirebase 初始化Firebase所有服务
 func InitFirebase(cfg *config.FirebaseConfig) error {
-	opt := option.WithCredentialsFile(cfg.CredentialsFile)
 	ctx := context.Background()
+	opt := option.WithCredentialsFile(cfg.CredentialsFile)
 
 	app, err := firebase.NewApp(ctx, &firebase.Config{
 		StorageBucket: cfg.StorageBucket,
@@ -37,38 +42,17 @@ func InitFirebase(cfg *config.FirebaseConfig) error {
 		return fmt.Errorf("error initializing firebase auth: %v", err)
 	}
 
-	// 获取 Storage 客户端
 	storageClient, err := app.Storage(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to initialize storage client: %v", err)
+		return fmt.Errorf("error initializing firebase storage: %v", err)
 	}
 
 	firebaseApp = app
 	firebaseAuth = authClient
 	firebaseStorage = storageClient
+
 	logger.Info("Firebase initialized successfully")
 	return nil
-}
-
-// VerifyIDToken 验证Firebase ID令牌
-func VerifyIDToken(ctx context.Context, idToken string) (*auth.Token, error) {
-	if firebaseAuth == nil {
-		return nil, fmt.Errorf("firebase auth client not initialized")
-	}
-
-	// 清理token
-	idToken = strings.TrimSpace(idToken)
-	if idToken == "" {
-		return nil, fmt.Errorf("empty id token")
-	}
-
-	// 验证token
-	token, err := firebaseAuth.VerifyIDToken(ctx, idToken)
-	if err != nil {
-		return nil, fmt.Errorf("error verifying ID token: %v", err)
-	}
-
-	return token, nil
 }
 
 // GetUserByUID 通过Firebase UID获取用户信息
@@ -180,4 +164,23 @@ func EnableUser(ctx context.Context, uid string) error {
 	}
 
 	return nil
+}
+
+// VerifyIDToken 验证Firebase ID令牌
+func VerifyIDToken(ctx context.Context, idToken string) (*auth.Token, error) {
+	if firebaseAuth == nil {
+		return nil, fmt.Errorf("firebase auth client not initialized")
+	}
+
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" {
+		return nil, fmt.Errorf("empty id token")
+	}
+
+	token, err := firebaseAuth.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		return nil, fmt.Errorf("error verifying ID token: %v", err)
+	}
+
+	return token, nil
 }

@@ -1,8 +1,22 @@
-GRANT ALL ON *.* TO root@'%';
+
+-- 创建数据库
+CREATE DATABASE IF NOT EXISTS distance_back
+CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
+
+-- 创建用户并授权
+CREATE USER IF NOT EXISTS 'distance_user'@'%' IDENTIFIED BY 'distance_password';
+GRANT ALL PRIVILEGES ON distance_back.* TO 'distance_user'@'%';
+FLUSH PRIVILEGES;
+
+-- 使用数据库
+USE distance_back;
+
+
 
 -- 用户基础信息表
 CREATE TABLE users (
-    id BIGINT UNSIGNED PRIMARY KEY COMMENT '用户ID',
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',  -- 改动：添加 AUTO_INCREMENT
     nickname VARCHAR(50) COMMENT '用户昵称',
     avatar_url VARCHAR(255) COMMENT '头像URL',
     birth_date DATE COMMENT '出生日期',
@@ -22,7 +36,7 @@ CREATE TABLE users (
     INDEX idx_location (location_latitude, location_longitude),
     user_type ENUM('individual', 'merchant', 'official', 'admin') DEFAULT 'individual' COMMENT '用户类型：individual-普通用户, merchant-商家, official-官方账号,admin-管理员',
     INDEX idx_status (status)
-) COMMENT '用户基础信息表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '用户基础信息表';
 
 -- 管理员权限表
 CREATE TABLE admin_permissions (
@@ -40,9 +54,9 @@ CREATE TABLE admin_permissions (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
     UNIQUE KEY uk_admin_permission (user_id, permission_type)
-) COMMENT '管理员权限表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '管理员权限表';
 
----被办用户
+-- 被办用户
 CREATE TABLE user_bans (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL COMMENT '被封禁用户ID',
@@ -55,7 +69,8 @@ CREATE TABLE user_bans (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (operator_id) REFERENCES users(id),
     INDEX idx_user_status (user_id, status)
-) COMMENT '用户封禁记录表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '用户封禁记录表';
+
 -- 用户认证信息表（Firebase）
 CREATE TABLE user_authentications (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '认证ID',
@@ -72,9 +87,9 @@ CREATE TABLE user_authentications (
     UNIQUE KEY uk_email (email),
     UNIQUE KEY uk_phone (phone_number),
     INDEX idx_auth_provider (auth_provider)
-) COMMENT '用户认证信息表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '用户认证信息表';
 
--- 用户设备表（推送相关）--待定 一个用户多个设备
+-- 用户设备表（推送相关）待定 一个用户多个设备
 CREATE TABLE user_devices (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '设备ID',
     user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
@@ -107,7 +122,7 @@ CREATE TABLE user_devices (
     UNIQUE KEY uk_device_token (device_token),
     INDEX idx_user_device (user_id, device_type, is_active),
     INDEX idx_browser_fingerprint (browser_fingerprint)
-) COMMENT '用户设备推送表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '用户设备推送表';
 
 
 CREATE TABLE user_relationships (
@@ -122,8 +137,8 @@ CREATE TABLE user_relationships (
     accepted_at TIMESTAMP NULL DEFAULT NULL COMMENT '关系确认时间',
 
     -- 外键约束
-    FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE COMMENT '关联关注人用户表',
-    FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE COMMENT '关联被关注人用户表',
+    FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE, 
+    FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE, 
 
     -- 唯一约束
     UNIQUE KEY unique_relationship (follower_id, following_id) COMMENT '保证两个用户之间只有一条关系记录',
@@ -131,7 +146,7 @@ CREATE TABLE user_relationships (
     -- 索引
     INDEX idx_follower (follower_id, status) COMMENT '查询用户关注列表',
     INDEX idx_following (following_id, status) COMMENT '查询用户粉丝列表'
-) COMMENT '用户关系表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '用户关系表';
 
 -- 话题表
 CREATE TABLE topics (
@@ -150,12 +165,12 @@ CREATE TABLE topics (
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     -- 外键约束
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE COMMENT '关联用户表',
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     -- 索引
     INDEX idx_location (location_latitude, location_longitude) COMMENT '位置索引',
     INDEX idx_status (status) COMMENT '状态索引',
     INDEX idx_user_time (user_id, created_at) COMMENT '用户话题时间索引'
-) COMMENT '话题表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '话题表';
 
 -- 话题图片表
 CREATE TABLE topic_images (
@@ -169,11 +184,11 @@ CREATE TABLE topic_images (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     
     -- 外键约束
-    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE COMMENT '关联话题表',
+    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
     
     -- 索引
     INDEX idx_topic_sort (topic_id, sort_order) COMMENT '话题图片排序索引'
-) COMMENT '话题图片表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '话题图片表';
 
 -- 话题标签表
 CREATE TABLE tags (
@@ -185,7 +200,7 @@ CREATE TABLE tags (
     
     -- 索引
     INDEX idx_use_count (use_count) COMMENT '使用次数索引，用于热门标签查询'
-) COMMENT '话题标签表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '话题标签表';
 
 -- 话题-标签关联表
 CREATE TABLE topic_tags (
@@ -197,12 +212,12 @@ CREATE TABLE topic_tags (
     PRIMARY KEY (topic_id, tag_id) COMMENT '联合主键，确保话题和标签的唯一关联',
     
     -- 外键约束
-    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE COMMENT '关联话题表',
-    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE COMMENT '关联标签表',
+    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
     
     -- 索引
     INDEX idx_tag_time (tag_id, created_at) COMMENT '标签时间索引，用于查询标签下的最新话题'
-) COMMENT '话题-标签关联表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '话题-标签关联表';
 
 -- 话题互动表
 CREATE TABLE topic_interactions (
@@ -214,18 +229,18 @@ CREATE TABLE topic_interactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '互动时间',
     interaction_status ENUM('active', 'cancelled') DEFAULT 'active' COMMENT '互动状态：active-有效, cancelled-已撤销',
     -- 外键约束
-    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE COMMENT '关联话题表',
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE COMMENT '关联用户表',
+    FOREIGN KEY (topic_id) REFERENCES topics(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     
     -- 唯一约束
     UNIQUE KEY unique_interaction (topic_id, user_id, interaction_type) COMMENT '确保用户对同一话题的同类互动只有一次',
     
     -- 索引
     INDEX idx_user_type (user_id, interaction_type, created_at) COMMENT '用户互动类型索引，用于查询用户的互动历史'
-) COMMENT '话题互动表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '话题互动表';
 
 
----聊天
+
 -- 聊天室表
 CREATE TABLE chat_rooms (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '聊天室ID',
@@ -236,8 +251,8 @@ CREATE TABLE chat_rooms (
     announcement TEXT COMMENT '聊天室公告',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '聊天室创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '聊天室更新时间',
-    FOREIGN KEY (topic_id) REFERENCES topics(id) COMMENT '关联话题表'
-) COMMENT '聊天室表，用于记录聊天室的基本信息';
+    FOREIGN KEY (topic_id) REFERENCES topics(id)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '聊天室表，用于记录聊天室的基本信息';
 
 -- 聊天室成员表
 CREATE TABLE chat_room_members (
@@ -249,23 +264,30 @@ CREATE TABLE chat_room_members (
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '加入聊天室时间',
     last_read_message_id BIGINT UNSIGNED DEFAULT 0 COMMENT '最后读取的消息ID',
     is_muted BOOLEAN DEFAULT FALSE COMMENT '是否被静音',
-    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) COMMENT '关联聊天室表',
-    FOREIGN KEY (user_id) REFERENCES users(id) COMMENT '关联用户表',
+    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
     UNIQUE KEY unique_member (chat_room_id, user_id) COMMENT '唯一约束：同一聊天室中的用户不能重复'
-) COMMENT '聊天室成员表，用于记录聊天室的成员信息';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '聊天室成员表，用于记录聊天室的成员信息';
 
 -- 消息表
 CREATE TABLE messages (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '消息ID',
     chat_room_id BIGINT UNSIGNED COMMENT '所属聊天室ID',
     sender_id BIGINT UNSIGNED COMMENT '发送者用户ID',
-   content_type ENUM('text', 'image', 'file', 'system') DEFAULT 'text' NOT NULL COMMENT '消息类型：text-文本, image-图片, file-文件, system-系统消息',
+    content_type ENUM('text', 'image', 'file', 'system') DEFAULT 'text' NOT NULL COMMENT '消息类型：text-文本, image-图片, file-文件, system-系统消息',
     content TEXT COMMENT '消息内容',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '消息发送时间',
-    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) COMMENT '关联聊天室表',
-    FOREIGN KEY (sender_id) REFERENCES users(id) COMMENT '关联用户表',
-    INDEX idx_chat_room_time (chat_room_id, created_at) COMMENT '聊天室和时间索引，用于按时间查询消息'
-) COMMENT '消息表，用于记录聊天室中的消息内容';
+    
+    -- 外键约束
+    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id),
+    FOREIGN KEY (sender_id) REFERENCES users(id),
+    
+    -- 索引
+    INDEX idx_chat_room_time (chat_room_id, created_at)
+) ENGINE=InnoDB 
+  DEFAULT CHARSET=utf8mb4 
+  COLLATE=utf8mb4_unicode_ci 
+  COMMENT '消息表，用于记录聊天室中的消息内容';
 
 -- 消息媒体表
 CREATE TABLE message_media (
@@ -276,7 +298,7 @@ CREATE TABLE message_media (
     file_name VARCHAR(255) COMMENT '媒体文件名称',
     file_size INT UNSIGNED COMMENT '媒体文件大小（单位：字节）',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '媒体文件上传时间',
-    FOREIGN KEY (message_id) REFERENCES messages(id) COMMENT '关联消息表'
+    FOREIGN KEY (message_id) REFERENCES messages(id)
 ) COMMENT '消息媒体表，用于存储消息中包含的媒体文件信息';
 
 -- 聊天室置顶表
@@ -284,12 +306,12 @@ CREATE TABLE pinned_chat_rooms (
     user_id BIGINT UNSIGNED COMMENT '用户ID',
     chat_room_id BIGINT UNSIGNED COMMENT '聊天室ID',
     pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '置顶时间',
-    PRIMARY KEY (user_id, chat_room_id) COMMENT '主键：用户ID和聊天室ID联合唯一',
-    FOREIGN KEY (user_id) REFERENCES users(id) COMMENT '关联用户表',
-    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) COMMENT '关联聊天室表'
-) COMMENT '聊天室置顶表，用于记录用户置顶的聊天室';
+    PRIMARY KEY (user_id, chat_room_id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '聊天室置顶表，用于记录用户置顶的聊天室';
 
-----
+
 -- 通知模板表
 CREATE TABLE notification_templates (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '模板ID',
@@ -301,7 +323,7 @@ CREATE TABLE notification_templates (
     status ENUM('active', 'inactive') DEFAULT 'active' COMMENT '模板状态',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
-) COMMENT '通知模板表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '通知模板表';
 
 -- 推送消息表
 CREATE TABLE push_notifications (
@@ -320,7 +342,7 @@ CREATE TABLE push_notifications (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (template_id) REFERENCES notification_templates(id),
     FOREIGN KEY (sender_id) REFERENCES users(id)
-) COMMENT '推送消息表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '推送消息表';
 
 -- 推送接收记录表
 CREATE TABLE push_notification_recipients (
@@ -336,7 +358,7 @@ CREATE TABLE push_notification_recipients (
     FOREIGN KEY (notification_id) REFERENCES push_notifications(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (device_id) REFERENCES user_devices(id)
-) COMMENT '推送接收记录表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '推送接收记录表';
 
 
 -- 地区表 --待定
@@ -364,7 +386,7 @@ CREATE TABLE user_locations (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (region_id) REFERENCES regions(id),
     INDEX idx_user_location (user_id, created_at)
-) COMMENT '用户位置历史表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '用户位置历史表';
 
 -- 敏感词表 --前期不要
 CREATE TABLE sensitive_words (
@@ -375,7 +397,7 @@ CREATE TABLE sensitive_words (
     status BOOLEAN DEFAULT TRUE COMMENT '是否启用',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
-) COMMENT '敏感词表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '敏感词表';
 
 -- 举报记录表 --前期不要
 CREATE TABLE reports (
@@ -394,7 +416,7 @@ CREATE TABLE reports (
     FOREIGN KEY (handler_id) REFERENCES users(id),
     INDEX idx_target (target_type, target_id),
     INDEX idx_status (status)
-) COMMENT '举报记录表';
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '举报记录表';
 
 -- 为经常进行范围查询的字段建立符合索引
 CREATE INDEX idx_topic_location_time ON topics(location_latitude, location_longitude, created_at);
@@ -405,4 +427,4 @@ ALTER TABLE topics ADD FULLTEXT INDEX ft_topic_content(title, content);
 
 -- 为经常统计的字段建立统计索引
 CREATE INDEX idx_topic_stats ON topics(status, created_at);
-CREATE INDEX idx_message_stats ON messages(status, created_at);
+CREATE INDEX idx_message_stats ON messages(created_at);

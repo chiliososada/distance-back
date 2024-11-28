@@ -1,8 +1,9 @@
 package response
 
 import (
-	"DistanceBack_v1/internal/model"
 	"time"
+
+	"github.com/chiliososada/distance-back/internal/model"
 )
 
 // UserResponse 用户信息响应

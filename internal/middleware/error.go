@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"DistanceBack_v1/pkg/logger"
+	"github.com/chiliososada/distance-back/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )

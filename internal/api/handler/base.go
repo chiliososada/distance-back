@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"DistanceBack_v1/internal/service"
-	"DistanceBack_v1/pkg/errors" // 添加这个导入
+	"github.com/chiliososada/distance-back/internal/service"
+	"github.com/chiliososada/distance-back/pkg/errors" // 添加这个导入
 
 	"github.com/gin-gonic/gin"
 )

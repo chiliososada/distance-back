@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"DistanceBack_v1/internal/model"
-	"DistanceBack_v1/internal/repository"
-	"DistanceBack_v1/pkg/cache"
-	"DistanceBack_v1/pkg/constants"
-	"DistanceBack_v1/pkg/logger"
-	"DistanceBack_v1/pkg/storage"
+	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/internal/repository"
+	"github.com/chiliososada/distance-back/pkg/cache"
+	"github.com/chiliososada/distance-back/pkg/constants"
+	"github.com/chiliososada/distance-back/pkg/logger"
+	"github.com/chiliososada/distance-back/pkg/storage"
 )
 
 type TopicService struct {

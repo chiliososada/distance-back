@@ -27,6 +27,28 @@ func NewAuthUser(user *auth.UserRecord) *AuthUser {
 	}
 }
 
+// NewAuthUserFromToken 从Firebase Token创建认证用户
+func NewAuthUserFromToken(token *auth.Token) *AuthUser {
+	claims := token.Claims
+	return &AuthUser{
+		UID:         token.UID,
+		Claims:      claims,
+		Email:       getClaimString(claims, "email"),
+		PhoneNumber: getClaimString(claims, "phone_number"),
+		DisplayName: getClaimString(claims, "name"),
+		PhotoURL:    getClaimString(claims, "picture"),
+	}
+}
+
+func getClaimString(claims map[string]interface{}, key string) string {
+	if value, ok := claims[key]; ok && value != nil {
+		if str, ok := value.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
 // HasRole 检查用户是否具有指定角色
 func (u *AuthUser) HasRole(role string) bool {
 	for _, r := range u.Roles {

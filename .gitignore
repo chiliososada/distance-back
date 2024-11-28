@@ -12,3 +12,4 @@
 vendor/
 /firebase-credentials.json
 /logs/
+/install

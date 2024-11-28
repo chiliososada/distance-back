@@ -1,4 +1,4 @@
-module DistanceBack_v1
+module github.com/chiliososada/distance-back
 
 go 1.23.3
 

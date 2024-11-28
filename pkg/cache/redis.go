@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"DistanceBack_v1/config"
-	"DistanceBack_v1/pkg/logger"
+	"github.com/chiliososada/distance-back/config"
+	"github.com/chiliososada/distance-back/pkg/logger"
 
 	"github.com/redis/go-redis/v9"
 )

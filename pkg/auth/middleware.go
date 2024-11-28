@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"DistanceBack_v1/pkg/errors"
-	"DistanceBack_v1/pkg/logger"
+	"github.com/chiliososada/distance-back/pkg/errors"
+	"github.com/chiliososada/distance-back/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,7 +49,8 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 将用户信息存储在上下文中
-		c.Set(AuthUserKey, decodedToken)
+		authUser := NewAuthUserFromToken(decodedToken) // 使用 NewAuthUserFromToken 创建认证用户
+		c.Set(AuthUserKey, authUser)                   // 存储 AuthUser 实例
 		c.Next()
 	}
 }

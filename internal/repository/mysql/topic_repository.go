@@ -1,10 +1,11 @@
 package mysql
 
 import (
-	"DistanceBack_v1/internal/model"
-	"DistanceBack_v1/internal/repository"
 	"context"
 	"fmt"
+
+	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/internal/repository"
 
 	"gorm.io/gorm"
 )
