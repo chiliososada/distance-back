@@ -1,3 +1,5 @@
+GRANT ALL ON *.* TO root@'%';
+
 -- 用户基础信息表
 CREATE TABLE users (
     id BIGINT UNSIGNED PRIMARY KEY COMMENT '用户ID',
