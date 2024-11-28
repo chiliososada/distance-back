@@ -74,17 +74,19 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 		// 关系相关路由
 		relationship := authenticated.Group("/relationships")
 		{
-			// 关注相关
-			relationship.POST("/users/:id/follow", h.Follow)           // 关注用户
-			relationship.DELETE("/users/:id/follow", h.Unfollow)       // 取消关注
-			relationship.POST("/followers/:id/accept", h.AcceptFollow) // 接受关注请求
-			relationship.POST("/followers/:id/reject", h.RejectFollow) // 拒绝关注请求
 
 			// 查询关系
-			relationship.GET("/users/:id/status", h.CheckRelationship) // 检查与用户的关系
-			relationship.GET("/followers", h.GetFollowers)             // 获取粉丝列表
-			relationship.GET("/followings", h.GetFollowings)           // 获取关注列表
-			relationship.GET("/friends", h.GetFriends)                 // 获取好友列表
+
+			relationship.GET("/followers", h.GetFollowers)   // 获取粉丝列表
+			relationship.GET("/followings", h.GetFollowings) // 获取关注列表
+			relationship.GET("/friends", h.GetFriends)       // 获取好友列表
+
+			// 关注相关
+			relationship.GET("/:id", h.CheckRelationship)    // 检查与用户的关系状态
+			relationship.POST("/:id/follow", h.Follow)       // 关注用户
+			relationship.DELETE("/:id/follow", h.Unfollow)   // 取消关注
+			relationship.POST("/:id/accept", h.AcceptFollow) // 接受关注请求
+			relationship.POST("/:id/reject", h.RejectFollow) // 拒绝关注请求
 
 		}
 
@@ -125,16 +127,20 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 			chats.GET("", h.ListRooms)                             // 获取聊天室列表
 			chats.GET("/:id", h.GetRoomInfo)                       // 获取聊天室信息
 
+			chats.PUT("/:id", h.UpdateRoom)              // 更新聊天室信息
+			chats.PUT("/:id/avatar", h.UpdateRoomAvatar) // 更新聊天室头像
+			chats.POST("/:id/leave", h.LeaveRoom)        // 离开聊天室
 			// 成员管理
 			chats.POST("/:id/members", h.AddMember)                       // 添加成员
 			chats.DELETE("/:id/members/:member_id", h.RemoveMember)       // 移除成员
 			chats.PUT("/:id/members/:member_id/role", h.UpdateMemberRole) // 更新成员角色
-
+			chats.GET("/:id/members", h.GetRoomMembers)                   // 获取聊天室成员列表
+			chats.PUT("/:id/members/:member_id", h.UpdateMember)          // 更新成员信息
 			// 消息管理
-			chats.POST("/:id/messages", h.SendMessage)             // 发送消息
-			chats.GET("/:id/messages", h.GetMessages)              // 获取消息历史
-			chats.POST("/:id/messages/read", h.MarkMessagesAsRead) // 标记消息已读
-			chats.GET("/:id/unread", h.GetUnreadCount)             // 获取未读数
+			chats.POST("/:id/messages", h.SendMessage)                         // 发送消息
+			chats.GET("/:id/messages", h.GetMessages)                          // 获取消息历史
+			chats.POST("/:id/messages/:message_id/read", h.MarkMessagesAsRead) // 标记消息已读
+			chats.GET("/:id/unread", h.GetUnreadCount)                         // 获取未读数
 
 			// 其他功能
 			chats.POST("/:id/pin", h.PinRoom)     // 置顶聊天室
