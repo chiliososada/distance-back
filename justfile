@@ -1,3 +1,4 @@
+set positional-arguments
 
 initdb:
     #!/usr/bin/env sh
@@ -24,3 +25,8 @@ install:
 
 run: install
     $(pwd)/install/app
+
+
+push message:
+    git add --all
+    git commit -m "{{message}}"
