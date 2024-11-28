@@ -65,6 +65,7 @@ const (
 	CodeRoomFull           = 40005 // 聊天室已满
 	CodeMuted              = 40006 // 用户被禁言
 	CodeMessageNotFound    = 40007 // 消息不存在
+	CodeForbidden          = 40008 // 群主不能退出群聊
 
 	// 话题相关错误 (5xxxx)
 	CodeTopicNotFound      = 50001 // 话题不存在
@@ -74,6 +75,11 @@ const (
 	CodeInteractionInvalid = 50005 // 无效的互动类型
 	CodeTooManyTags        = 50006 // 标签数量超限
 	CodeContentInvalid     = 50007 // 内容不合规
+
+	// 位置相关错误码 (8xxxx)
+	CodeInvalidLocation  = 80001 // 无效的位置坐标
+	CodeLocationDisabled = 80002 // 位置服务已禁用
+	CodeLocationNotFound = 80003 // 位置信息不存在
 )
 
 // 创建新的错误
@@ -134,8 +140,6 @@ var (
 	ErrThirdParty     = New(CodeThirdParty, "第三方服务错误")
 	ErrOperation      = New(CodeOperation, "操作失败")
 
-	// 用户相关错误
-	ErrUserNotFound    = New(CodeUserNotFound, "用户不存在")
 	ErrUserExists      = New(CodeUserExists, "用户已存在")
 	ErrPasswordInvalid = New(CodePasswordInvalid, "密码错误")
 	ErrTokenInvalid    = New(CodeTokenInvalid, "无效的Token")
@@ -153,4 +157,27 @@ var (
 	ErrTopicNotFound = New(CodeTopicNotFound, "话题不存在")
 	ErrTopicExpired  = New(CodeTopicExpired, "话题已过期")
 	ErrTagNotFound   = New(CodeTagNotFound, "标签不存在")
+
+	// 位置相关错误
+	ErrInvalidLocation = New(CodeInvalidLocation, "Invalid location coordinates").
+				WithStatus(http.StatusBadRequest)
+	ErrLocationDisabled = New(CodeLocationDisabled, "Location service is disabled").
+				WithStatus(http.StatusForbidden)
+	ErrLocationNotFound = New(CodeLocationNotFound, "Location not found").
+				WithStatus(http.StatusNotFound)
+
+	ErrUnauthorized = New(CodeAuthentication, "Unauthorized").
+			WithStatus(http.StatusUnauthorized)
+
+	ErrUserNotFound = New(CodeUserNotFound, "User not found").
+			WithStatus(http.StatusNotFound)
+
+	ErrForbidden = New(CodeAuthorization, "Forbidden").
+			WithStatus(http.StatusForbidden)
+
+	ErrInvalidRequest = New(CodeValidation, "Invalid request").
+				WithStatus(http.StatusBadRequest)
+
+	ErrInvalidFollowing = New(CodeSelfRelation, "Cannot follow yourself").
+				WithStatus(http.StatusBadRequest)
 )

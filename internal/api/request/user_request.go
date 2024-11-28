@@ -9,7 +9,7 @@ type RegisterRequest struct {
 	DeviceToken string `json:"device_token" binding:"required"`
 }
 
-// UpdateProfileRequest 更新用户资料请求
+// UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
 	Nickname            string `json:"nickname" binding:"omitempty,min=2,max=50"`
 	Bio                 string `json:"bio" binding:"omitempty,max=500"`
@@ -17,25 +17,37 @@ type UpdateProfileRequest struct {
 	BirthDate           string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
 	Language            string `json:"language" binding:"omitempty,len=5"`
 	PrivacyLevel        string `json:"privacy_level" binding:"omitempty,oneof=public friends private"`
-	LocationSharing     bool   `json:"location_sharing"`
-	PhotoEnabled        bool   `json:"photo_enabled"`
-	NotificationEnabled bool   `json:"notification_enabled"`
+	LocationSharing     *bool  `json:"location_sharing,omitempty"`
+	PhotoEnabled        *bool  `json:"photo_enabled,omitempty"`
+	NotificationEnabled *bool  `json:"notification_enabled,omitempty"`
 }
 
 // UpdateLocationRequest 更新位置请求
 type UpdateLocationRequest struct {
-	Location
+	LocationQuery
 	LocationSharing bool `json:"location_sharing"`
 }
 
-// SearchUserRequest 搜索用户请求
-type SearchUserRequest struct {
-	Pagination
-	Keyword string `json:"keyword" form:"keyword" binding:"required,min=1,max=50"`
+// SearchUsersRequest 搜索用户请求
+type SearchUsersRequest struct {
+	PaginationQuery
+	SortQuery
+	Keyword string `form:"keyword" binding:"required,min=1,max=50" json:"keyword"`
 }
 
 // NearbyUsersRequest 查询附近用户请求
 type NearbyUsersRequest struct {
-	Pagination
-	Location
+	PaginationQuery
+	LocationQuery
+}
+
+// UserDeviceRequest 用户设备注册请求
+type UserDeviceRequest struct {
+	DeviceToken string `json:"device_token" binding:"required"`
+	DeviceType  string `json:"device_type" binding:"required,oneof=ios android web"`
+	DeviceName  string `json:"device_name" binding:"required,max=100"`
+	DeviceModel string `json:"device_model" binding:"max=50"`
+	OSVersion   string `json:"os_version" binding:"max=20"`
+	AppVersion  string `json:"app_version" binding:"required,max=20"`
+	PushEnabled *bool  `json:"push_enabled,omitempty"`
 }

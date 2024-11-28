@@ -44,6 +44,11 @@ type User struct {
 	PhotoEnabled        bool       `gorm:"default:true" json:"photo_enabled"`
 	LastActiveAt        *time.Time `json:"last_active_at"`
 	UserType            string     `gorm:"type:enum('individual','merchant','official','admin');default:'individual'" json:"user_type"`
+	// 添加统计字段
+	TopicsCount    int64 `gorm:"-" json:"topics_count"`    // 话题数
+	FollowersCount int64 `gorm:"-" json:"followers_count"` // 粉丝数
+	FollowingCount int64 `gorm:"-" json:"following_count"` // 关注数
+	FriendsCount   int64 `gorm:"-" json:"friends_count"`   // 好友数
 }
 
 // UserAuthentication 用户认证模型

@@ -18,6 +18,14 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
+	//r.Use(middleware.ErrorHandler()) // 错误处理
+	// r.Use(middleware.RequestLogger(config))    // 日志记录
+	// r.Use(middleware.CORS())                    // 跨域处理
+	// r.Use(middleware.Timeout(10 * time.Second)) // 超时控制
+
+	// API限流
+	//r.Use(middleware.RateLimit(100, 10)) // 限制每IP每秒请求数
+
 	// CORS 配置
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},

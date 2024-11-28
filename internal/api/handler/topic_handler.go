@@ -4,9 +4,8 @@ import (
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/model"
-	"github.com/chiliososada/distance-back/internal/service"
+	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,45 +19,45 @@ import (
 // @Param request body request.CreateTopicRequest true "话题信息"
 // @Param images formData file false "话题图片文件(可多张)"
 // @Success 200 {object} response.Response{data=response.TopicResponse} "创建成功"
-// @Failure 400 {object} response.Response "参数错误"
-// @Failure 401 {object} response.Response "未授权"
-// @Failure 500 {object} response.Response "服务器错误"
+// @Failure 400,401,403,500 {object} response.Response "错误详情"
 // @Router /api/v1/topics [post]
 func (h *Handler) CreateTopic(c *gin.Context) {
-	// 1. 获取并验证当前用户
+	// 身份验证
 	userID := h.GetCurrentUserID(c)
 	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
+		Error(c, errors.New(errors.CodeAuthentication, "未授权访问").WithStatus(401))
 		return
 	}
 
-	// 2. 解析请求参数
+	// 参数验证
 	var req request.CreateTopicRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error("话题参数解析失败",
-			logger.Any("error", err),
-			logger.Uint64("user_id", userID))
-		Error(c, service.NewError(service.CodeInvalidRequest, "无效的请求参数"))
+	if err := c.ShouldBind(&req); err != nil {
+		logger.Error("创建话题参数验证失败",
+			logger.String("path", c.Request.URL.Path),
+			logger.Any("error", err))
+		Error(c, errors.New(errors.CodeValidation, "无效的请求参数").
+			WithDetails(err.Error()).
+			WithStatus(400))
 		return
 	}
 
-	// 3. 处理上传的图片
+	// 处理图片
 	var images []*model.File
 	form, err := c.MultipartForm()
 	if err == nil && form != nil && form.File["images"] != nil {
 		files := form.File["images"]
-		images = make([]*model.File, 0, len(files))
-		for _, file := range files {
-			images = append(images, &model.File{
+		images = make([]*model.File, len(files))
+		for i, file := range files {
+			images[i] = &model.File{
 				File: file,
 				Type: "image",
 				Name: file.Filename,
 				Size: uint(file.Size),
-			})
+			}
 		}
 	}
 
-	// 4. 构建话题模型
+	// 构建话题模型
 	topic := &model.Topic{
 		UserID:            userID,
 		Title:             req.Title,
@@ -66,32 +65,31 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 		LocationLatitude:  req.Latitude,
 		LocationLongitude: req.Longitude,
 		ExpiresAt:         req.ExpiresAt,
-		Status:            "active", // 设置初始状态
 	}
 
-	// 5. 调用服务创建话题
+	// 创建话题
 	createdTopic, err := h.topicService.CreateTopic(c, userID, topic, images)
 	if err != nil {
 		logger.Error("创建话题失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
-			logger.Uint64("user_id", userID),
-			logger.Any("topic", topic))
-		Error(c, err)
+			logger.Uint64("user_id", userID))
+		Error(c, errors.New(errors.CodeOperation, "创建话题失败").
+			WithDeveloper(err.Error()).
+			WithStatus(500))
 		return
 	}
 
-	// 6. 处理标签
+	// 处理标签
 	if len(req.Tags) > 0 {
 		if err := h.topicService.AddTags(c, createdTopic.ID, req.Tags); err != nil {
-			logger.Error("添加标签失败",
+			logger.Error("添加话题标签失败",
+				logger.String("path", c.Request.URL.Path),
 				logger.Any("error", err),
-				logger.Uint64("topic_id", createdTopic.ID),
-				logger.Any("tags", req.Tags))
-			// 标签添加失败不影响话题创建的结果
+				logger.Uint64("topic_id", createdTopic.ID))
 		}
 	}
 
-	// 7. 转换并返回响应
 	Success(c, response.ToTopicResponse(createdTopic))
 }
 
@@ -104,35 +102,36 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 // @Param Authorization header string true "Bearer 用户令牌"
 // @Param id path uint64 true "话题ID"
 // @Param request body request.UpdateTopicRequest true "更新内容"
-// @Success 200 {object} response.Response{data=response.TopicResponse} "更新成功"
+// @Success 200 {object} response.Response "更新成功"
 // @Failure 400,401,403,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id} [put]
 func (h *Handler) UpdateTopic(c *gin.Context) {
-	// 1. 身份验证
+	// 身份验证
 	userID := h.GetCurrentUserID(c)
 	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
+		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 2. 获取话题ID
+	// 获取话题ID
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
-	// 3. 解析请求参数
+	// 参数验证
 	var req request.UpdateTopicRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error("更新参数解析失败",
-			logger.Any("error", err),
-			logger.Uint64("topic_id", topicID))
-		Error(c, service.ErrInvalidRequest)
+	if err := c.ShouldBind(&req); err != nil {
+		logger.Error("更新话题参数验证失败",
+			logger.String("path", c.Request.URL.Path),
+			logger.Any("error", err))
+		Error(c, errors.New(errors.CodeValidation, "无效的请求参数").
+			WithDetails(err.Error()))
 		return
 	}
 
-	// 4. 构建更新模型
+	// 构建更新模型
 	topic := &model.Topic{
 		BaseModel: model.BaseModel{ID: topicID},
 		Title:     req.Title,
@@ -140,13 +139,14 @@ func (h *Handler) UpdateTopic(c *gin.Context) {
 		ExpiresAt: req.ExpiresAt,
 	}
 
-	// 5. 执行更新
+	// 执行更新
 	if err := h.topicService.UpdateTopic(c, userID, topic); err != nil {
 		logger.Error("更新话题失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("user_id", userID),
 			logger.Uint64("topic_id", topicID))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "更新话题失败"))
 		return
 	}
 
@@ -165,30 +165,28 @@ func (h *Handler) UpdateTopic(c *gin.Context) {
 // @Failure 400,401,403,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id} [delete]
 func (h *Handler) DeleteTopic(c *gin.Context) {
-	// 1. 身份验证
+	// 身份验证
 	userID := h.GetCurrentUserID(c)
 	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
+		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 2. 获取话题ID
+	// 获取话题ID
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		logger.Error("话题ID解析失败",
-			logger.Any("error", err),
-			logger.String("id", c.Param("id")))
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
-	// 3. 执行删除操作
+	// 执行删除
 	if err := h.topicService.DeleteTopic(c, userID, topicID); err != nil {
 		logger.Error("删除话题失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("user_id", userID),
 			logger.Uint64("topic_id", topicID))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "删除话题失败"))
 		return
 	}
 
@@ -202,48 +200,44 @@ func (h *Handler) DeleteTopic(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path uint64 true "话题ID"
-// @Param Authorization header string false "Bearer 用户令牌(可选)"
 // @Success 200 {object} response.Response{data=response.TopicDetailResponse} "话题详情"
 // @Failure 400,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id} [get]
 func (h *Handler) GetTopic(c *gin.Context) {
-	// 1. 获取话题ID
+	// 获取话题ID
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
-	// 2. 异步增加浏览次数
+	// 异步增加浏览次数
 	go h.topicService.ViewTopic(c, topicID)
 
-	// 3. 获取话题信息
+	// 获取话题信息
 	topic, err := h.topicService.GetTopicByID(c, topicID)
 	if err != nil {
 		logger.Error("获取话题失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("topic_id", topicID))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeNotFound, "获取话题失败"))
 		return
 	}
 
 	if topic == nil {
-		Error(c, service.ErrTopicNotFound)
+		Error(c, errors.New(errors.CodeNotFound, "话题不存在"))
 		return
 	}
 
-	// 4. 获取当前用户的互动状态(如果已登录)
+	// 获取当前用户的互动状态
 	userID := h.GetCurrentUserID(c)
-	var interaction *model.TopicInteraction
+	var interactions []*model.TopicInteraction
 	if userID != 0 {
-		interactions, _ := h.topicService.GetInteractions(c, topicID, "")
-		if len(interactions) > 0 {
-			interaction = interactions[0]
-		}
+		interactions, _ = h.topicService.GetInteractions(c, topicID, "")
 	}
 
-	// 5. 转换并返回响应
-	Success(c, response.ToTopicDetailResponse(topic, interaction))
+	Success(c, response.ToTopicDetailResponse(topic, interactions))
 }
 
 // ListTopics 获取话题列表
@@ -260,77 +254,28 @@ func (h *Handler) GetTopic(c *gin.Context) {
 // @Failure 400 {object} response.Response "错误详情"
 // @Router /api/v1/topics [get]
 func (h *Handler) ListTopics(c *gin.Context) {
-	// 1. 获取查询参数
-	var query request.TopicListRequest
-	if err := c.ShouldBindQuery(&query); err != nil {
-		Error(c, service.ErrInvalidRequest)
+	// 参数验证
+	var req request.TopicListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		Error(c, errors.New(errors.CodeValidation, "无效的查询参数").
+			WithDetails(err.Error()))
 		return
 	}
 
-	// 2. 获取话题列表
-	topics, total, err := h.topicService.ListTopics(c, query.Page, query.PageSize)
+	// 获取话题列表
+	topics, total, err := h.topicService.ListTopics(c, req.Page, req.PageSize)
 	if err != nil {
 		logger.Error("获取话题列表失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
-			logger.Any("query", query))
-		Error(c, err)
+			logger.Any("query", req))
+		Error(c, errors.Wrap(err, errors.CodeOperation, "获取话题列表失败"))
 		return
 	}
 
-	// 3. 转换并返回响应
-	Success(c, response.ToTopicListResponse(topics, total, query.Page, query.PageSize))
+	Success(c, response.ToTopicListResponse(topics, total, req.Page, req.PageSize))
 }
 
-// ListUserTopics 获取用户的话题列表
-// @Summary 获取用户话题列表
-// @Description 分页获取指定用户发布的所有话题
-// @Tags 话题
-// @Accept json
-// @Produce json
-// @Param id path uint64 true "用户ID"
-// @Param page query int true "页码" minimum(1)
-// @Param page_size query int true "每页大小" minimum(1) maximum(100)
-// @Success 200 {object} response.Response{data=response.TopicListResponse} "话题列表"
-// @Failure 400,404 {object} response.Response "错误详情"
-// @Router /api/v1/topics/users/{id} [get]
-func (h *Handler) ListUserTopics(c *gin.Context) {
-	// 1. 获取目标用户ID
-	targetUserID, err := ParseUint64Param(c, "id")
-	if err != nil {
-		logger.Error("解析用户ID失败",
-			logger.Any("error", err),
-			logger.String("id", c.Param("id")))
-		Error(c, service.ErrInvalidRequest)
-		return
-	}
-
-	// 2. 获取分页参数
-	pagination, err := GetPagination(c)
-	if err != nil {
-		logger.Error("解析分页参数失败",
-			logger.Any("error", err),
-			logger.Uint64("target_user_id", targetUserID))
-		Error(c, service.ErrInvalidRequest)
-		return
-	}
-
-	// 3. 获取用户话题列表
-	topics, total, err := h.topicService.ListUserTopics(c, targetUserID, pagination.Page, pagination.PageSize)
-	if err != nil {
-		logger.Error("获取用户话题列表失败",
-			logger.Any("error", err),
-			logger.Uint64("target_user_id", targetUserID),
-			logger.Int("page", pagination.Page),
-			logger.Int("page_size", pagination.PageSize))
-		Error(c, err)
-		return
-	}
-
-	// 4. 转换并返回响应
-	Success(c, response.ToTopicListResponse(topics, total, pagination.Page, pagination.PageSize))
-}
-
-// GetNearbyTopics 获取附近的话题
 // GetNearbyTopics 获取附近话题
 // @Summary 获取附近话题
 // @Description 根据给定坐标获取指定范围内的话题列表
@@ -346,90 +291,30 @@ func (h *Handler) ListUserTopics(c *gin.Context) {
 // @Failure 400 {object} response.Response "错误详情"
 // @Router /api/v1/topics/nearby [get]
 func (h *Handler) GetNearbyTopics(c *gin.Context) {
-	// 1. 获取查询参数
-	var query request.NearbyTopicsRequest
-	if err := c.ShouldBindQuery(&query); err != nil {
-		Error(c, service.ErrInvalidRequest)
+	var req request.NearbyTopicsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		Error(c, errors.New(errors.CodeValidation, "无效的查询参数").
+			WithDetails(err.Error()))
 		return
 	}
 
-	// 2. 获取附近话题
-	topics, total, err := h.topicService.GetNearbyTopics(
-		c,
-		query.Latitude,
-		query.Longitude,
-		query.Radius,
-		query.Page,
-		query.PageSize,
-	)
+	// 验证位置参数
+	if err := ValidateLocation(req.Latitude, req.Longitude, req.Radius); err != nil {
+		Error(c, err)
+		return
+	}
+
+	topics, total, err := h.topicService.GetNearbyTopics(c, req.Latitude, req.Longitude, req.Radius, req.Page, req.PageSize)
 	if err != nil {
 		logger.Error("获取附近话题失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
-			logger.Any("query", query))
-		Error(c, err)
+			logger.Any("request", req))
+		Error(c, errors.Wrap(err, errors.CodeOperation, "获取附近话题失败"))
 		return
 	}
 
-	// 3. 转换并返回响应
-	Success(c, response.ToTopicListResponse(topics, total, query.Page, query.PageSize))
-}
-
-// AddTopicImage 添加话题图片
-// @Summary 为话题添加图片
-// @Description 为指定话题添加一张或多张图片
-// @Tags 话题
-// @Accept multipart/form-data
-// @Produce json
-// @Param Authorization header string true "Bearer 用户令牌"
-// @Param id path uint64 true "话题ID"
-// @Param image formData file true "图片文件"
-// @Success 200 {object} response.Response "添加成功"
-// @Failure 400,401,403,404 {object} response.Response "错误详情"
-// @Router /api/v1/topics/{id}/images [post]
-func (h *Handler) AddTopicImage(c *gin.Context) {
-	// 1. 身份验证
-	userID := h.GetCurrentUserID(c)
-	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
-		return
-	}
-
-	// 2. 获取话题ID
-	topicID, err := ParseUint64Param(c, "id")
-	if err != nil {
-		Error(c, service.ErrInvalidRequest)
-		return
-	}
-
-	// 3. 获取上传的文件
-	file, err := c.FormFile("image")
-	if err != nil {
-		logger.Error("获取上传文件失败",
-			logger.Any("error", err),
-			logger.Uint64("topic_id", topicID))
-		Error(c, service.ErrInvalidRequest)
-		return
-	}
-
-	// 4. 构建文件模型
-	image := &model.File{
-		File: file,
-		Type: "image",
-		Name: file.Filename,
-		Size: uint(file.Size),
-	}
-	images := []*model.File{image}
-
-	// 5. 处理图片上传
-	if err := h.topicService.AddTopicImage(c, topicID, images); err != nil {
-		logger.Error("添加话题图片失败",
-			logger.Any("error", err),
-			logger.Uint64("topic_id", topicID))
-		Error(c, err)
-		return
-	}
-
-	Success(c, nil)
+	Success(c, response.ToTopicListResponse(topics, total, req.Page, req.PageSize))
 }
 
 // AddTopicInteraction 添加话题互动
@@ -445,79 +330,31 @@ func (h *Handler) AddTopicImage(c *gin.Context) {
 // @Failure 400,401,403,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id}/interactions/{type} [post]
 func (h *Handler) AddTopicInteraction(c *gin.Context) {
-	// 1. 身份验证
 	userID := h.GetCurrentUserID(c)
 	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
+		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 2. 获取参数
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
 	interactionType := c.Param("type")
 	if !isValidInteractionType(interactionType) {
-		Error(c, service.NewError(service.CodeInvalidRequest, "无效的互动类型"))
+		Error(c, errors.New(errors.CodeValidation, "无效的互动类型"))
 		return
 	}
 
-	// 3. 添加互动
 	if err := h.topicService.AddInteraction(c, userID, topicID, interactionType); err != nil {
 		logger.Error("添加话题互动失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("topic_id", topicID),
 			logger.String("type", interactionType))
-		Error(c, err)
-		return
-	}
-
-	Success(c, nil)
-}
-
-// RemoveTopicInteraction 移除话题互动
-// @Summary 移除话题互动
-// @Description 移除指定的话题互动
-// @Tags 话题
-// @Accept json
-// @Produce json
-// @Param Authorization header string true "Bearer 用户令牌"
-// @Param id path uint64 true "话题ID"
-// @Param type path string true "互动类型(like/favorite/share)"
-// @Success 200 {object} response.Response "移除成功"
-// @Failure 400,401,403,404 {object} response.Response "错误详情"
-// @Router /api/v1/topics/{id}/interactions/{type} [delete]
-func (h *Handler) RemoveTopicInteraction(c *gin.Context) {
-	// 1. 身份验证
-	userID := h.GetCurrentUserID(c)
-	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
-		return
-	}
-
-	// 2. 获取参数
-	topicID, err := ParseUint64Param(c, "id")
-	if err != nil {
-		Error(c, service.ErrInvalidRequest)
-		return
-	}
-
-	interactionType := c.Param("type")
-	if !isValidInteractionType(interactionType) {
-		Error(c, service.NewError(service.CodeInvalidRequest, "无效的互动类型"))
-		return
-	}
-
-	// 3. 移除互动
-	if err := h.topicService.RemoveInteraction(c, userID, topicID, interactionType); err != nil {
-		logger.Error("移除话题互动失败",
-			logger.Any("error", err),
-			logger.Uint64("topic_id", topicID),
-			logger.String("type", interactionType))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "添加互动失败"))
 		return
 	}
 
@@ -532,40 +369,35 @@ func (h *Handler) RemoveTopicInteraction(c *gin.Context) {
 // @Produce json
 // @Param id path uint64 true "话题ID"
 // @Param type path string true "互动类型(like/favorite/share)"
-// @Success 200 {object} response.Response "互动列表"
+// @Success 200 {object} response.Response{data=[]response.TopicInteractionResponse} "互动列表"
 // @Failure 400,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id}/interactions/{type} [get]
 func (h *Handler) GetTopicInteractions(c *gin.Context) {
-	// 1. 获取参数
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
 	interactionType := c.Param("type")
 	if !isValidInteractionType(interactionType) {
-		Error(c, service.NewError(service.CodeInvalidRequest, "无效的互动类型"))
+		Error(c, errors.New(errors.CodeValidation, "无效的互动类型"))
 		return
 	}
 
-	// 2. 获取互动列表
 	interactions, err := h.topicService.GetInteractions(c, topicID, interactionType)
 	if err != nil {
 		logger.Error("获取话题互动失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("topic_id", topicID),
 			logger.String("type", interactionType))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "获取互动列表失败"))
 		return
 	}
 
-	Success(c, response.ToTopicInteractionsResponse(interactions))
-}
-
-// isValidInteractionType 验证互动类型是否有效
-func isValidInteractionType(t string) bool {
-	return t == "like" || t == "favorite" || t == "share"
+	page, size := 1, len(interactions)
+	Success(c, response.ToInteractionListResponse(interactions, int64(size), page, size))
 }
 
 // AddTags 添加话题标签
@@ -581,44 +413,67 @@ func isValidInteractionType(t string) bool {
 // @Failure 400,401,403,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id}/tags [post]
 func (h *Handler) AddTags(c *gin.Context) {
-	// 1. 身份验证
 	userID := h.GetCurrentUserID(c)
 	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
+		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 2. 获取话题ID
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		logger.Error("解析话题ID失败",
-			logger.Any("error", err),
-			logger.String("id", c.Param("id")))
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
-	// 3. 解析请求参数
 	var req request.AddTagsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error("解析标签请求失败",
-			logger.Any("error", err),
-			logger.Uint64("topic_id", topicID))
-		Error(c, service.NewError(service.CodeInvalidRequest, "无效的标签参数"))
+		Error(c, errors.New(errors.CodeValidation, "无效的标签参数").
+			WithDetails(err.Error()))
 		return
 	}
 
-	// 4. 添加标签
 	if err := h.topicService.AddTags(c, topicID, req.Tags); err != nil {
 		logger.Error("添加话题标签失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("topic_id", topicID),
 			logger.Any("tags", req.Tags))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "添加标签失败"))
 		return
 	}
 
 	Success(c, nil)
+}
+
+// GetPopularTags 获取热门标签
+// @Summary 获取热门标签
+// @Description 获取使用次数最多的标签列表
+// @Tags 话题
+// @Accept json
+// @Produce json
+// @Param limit query int false "返回数量" minimum(1) maximum(100)
+// @Success 200 {object} response.Response{data=[]response.TagInfo} "标签列表"
+// @Failure 400 {object} response.Response "错误详情"
+// @Router /api/v1/tags/popular [get]
+func (h *Handler) GetPopularTags(c *gin.Context) {
+	var req request.GetPopularTagsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		Error(c, errors.New(errors.CodeValidation, "无效的查询参数").
+			WithDetails(err.Error()))
+		return
+	}
+
+	tags, err := h.topicService.GetPopularTags(c, req.Limit)
+	if err != nil {
+		logger.Error("获取热门标签失败",
+			logger.String("path", c.Request.URL.Path),
+			logger.Any("error", err),
+			logger.Int("limit", req.Limit))
+		Error(c, errors.Wrap(err, errors.CodeOperation, "获取热门标签失败"))
+		return
+	}
+
+	Success(c, response.ToTagInfoList(tags))
 }
 
 // RemoveTags 移除话题标签
@@ -634,40 +489,32 @@ func (h *Handler) AddTags(c *gin.Context) {
 // @Failure 400,401,403,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id}/tags [delete]
 func (h *Handler) RemoveTags(c *gin.Context) {
-	// 1. 身份验证
 	userID := h.GetCurrentUserID(c)
 	if userID == 0 {
-		Error(c, service.ErrUnauthorized)
+		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 2. 获取话题ID
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		logger.Error("解析话题ID失败",
-			logger.Any("error", err),
-			logger.String("id", c.Param("id")))
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
-	// 3. 解析请求参数
 	var req request.RemoveTagsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logger.Error("解析标签请求失败",
-			logger.Any("error", err),
-			logger.Uint64("topic_id", topicID))
-		Error(c, service.NewError(service.CodeInvalidRequest, "无效的标签参数"))
+		Error(c, errors.New(errors.CodeValidation, "无效的请求参数").
+			WithDetails(err.Error()))
 		return
 	}
 
-	// 4. 验证权限并移除标签
 	if err := h.topicService.RemoveTags(c, topicID, req.TagIDs); err != nil {
 		logger.Error("移除话题标签失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("topic_id", topicID),
 			logger.Any("tag_ids", req.TagIDs))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "移除标签失败"))
 		return
 	}
 
@@ -685,55 +532,170 @@ func (h *Handler) RemoveTags(c *gin.Context) {
 // @Failure 400,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id}/tags [get]
 func (h *Handler) GetTopicTags(c *gin.Context) {
-	// 1. 获取话题ID
 	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		Error(c, service.ErrInvalidRequest)
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
 		return
 	}
 
-	// 2. 获取标签列表
 	tags, err := h.topicService.GetTopicTags(c, topicID)
 	if err != nil {
 		logger.Error("获取话题标签失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.Uint64("topic_id", topicID))
-		Error(c, err)
+		Error(c, errors.Wrap(err, errors.CodeOperation, "获取标签失败"))
 		return
 	}
 
 	Success(c, response.ToTagInfoList(tags))
 }
 
-// GetPopularTags 获取热门标签
-// @Summary 获取热门标签
-// @Description 获取使用次数最多的标签列表
+// RemoveTopicInteraction 移除话题互动
+// @Summary 移除话题互动
+// @Description 移除指定的话题互动
 // @Tags 话题
 // @Accept json
 // @Produce json
-// @Param limit query int false "返回数量" minimum(1) maximum(100)
-// @Success 200 {object} response.Response{data=[]response.TagInfo} "标签列表"
-// @Failure 400 {object} response.Response "错误详情"
-// @Router /api/v1/topics/tags/popular [get]
-func (h *Handler) GetPopularTags(c *gin.Context) {
-	// 1. 获取参数
-	var query struct {
-		Limit int `form:"limit" binding:"required,min=1,max=100"`
-	}
-	if err := c.ShouldBindQuery(&query); err != nil {
-		Error(c, service.ErrInvalidRequest)
+// @Param Authorization header string true "Bearer 用户令牌"
+// @Param id path uint64 true "话题ID"
+// @Param type path string true "互动类型(like/favorite/share)"
+// @Success 200 {object} response.Response "移除成功"
+// @Failure 400,401,403,404 {object} response.Response "错误详情"
+// @Router /api/v1/topics/{id}/interactions/{type} [delete]
+func (h *Handler) RemoveTopicInteraction(c *gin.Context) {
+	userID := h.GetCurrentUserID(c)
+	if userID == 0 {
+		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 2. 获取热门标签
-	tags, err := h.topicService.GetPopularTags(c, query.Limit)
+	topicID, err := ParseUint64Param(c, "id")
 	if err != nil {
-		logger.Error("获取热门标签失败",
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
+		return
+	}
+
+	interactionType := c.Param("type")
+	if !isValidInteractionType(interactionType) {
+		Error(c, errors.New(errors.CodeValidation, "无效的互动类型"))
+		return
+	}
+
+	if err := h.topicService.RemoveInteraction(c, userID, topicID, interactionType); err != nil {
+		logger.Error("移除话题互动失败",
+			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
-			logger.Int("limit", query.Limit))
+			logger.Uint64("topic_id", topicID),
+			logger.String("type", interactionType))
+		Error(c, errors.Wrap(err, errors.CodeOperation, "移除互动失败"))
+		return
+	}
+
+	Success(c, nil)
+}
+
+// isValidInteractionType 验证互动类型是否有效
+func isValidInteractionType(t string) bool {
+	validTypes := map[string]bool{
+		"like":     true,
+		"favorite": true,
+		"share":    true,
+	}
+	return validTypes[t]
+}
+
+// ListUserTopics 获取用户的话题列表
+// @Summary 获取用户话题列表
+// @Description 分页获取指定用户发布的所有话题
+// @Tags 话题
+// @Accept json
+// @Produce json
+// @Param id path uint64 true "用户ID"
+// @Param page query int true "页码" minimum(1)
+// @Param page_size query int true "每页大小" minimum(1) maximum(100)
+// @Success 200 {object} response.Response{data=response.TopicListResponse} "话题列表"
+// @Failure 400,404 {object} response.Response "错误详情"
+// @Router /api/v1/topics/users/{id} [get]
+func (h *Handler) ListUserTopics(c *gin.Context) {
+	targetUserID, err := ParseUint64Param(c, "id")
+	if err != nil {
+		Error(c, errors.New(errors.CodeValidation, "无效的用户ID"))
+		return
+	}
+
+	page, size, err := GetPagination(c)
+	if err != nil {
 		Error(c, err)
 		return
 	}
 
-	Success(c, response.ToTagInfoList(tags))
+	topics, total, err := h.topicService.ListUserTopics(c, targetUserID, page, size)
+	if err != nil {
+		logger.Error("获取用户话题列表失败",
+			logger.String("path", c.Request.URL.Path),
+			logger.Any("error", err),
+			logger.Uint64("user_id", targetUserID),
+			logger.Int("page", page),
+			logger.Int("size", size))
+		Error(c, errors.Wrap(err, errors.CodeOperation, "获取话题列表失败"))
+		return
+	}
+
+	Success(c, response.ToTopicListResponse(topics, total, page, size))
+}
+
+// AddTopicImage 添加话题图片
+// @Summary 为话题添加图片
+// @Description 为指定话题添加一张或多张图片
+// @Tags 话题
+// @Accept multipart/form-data
+// @Produce json
+// @Param Authorization header string true "Bearer 用户令牌"
+// @Param id path uint64 true "话题ID"
+// @Param image formData file true "图片文件"
+// @Success 200 {object} response.Response "添加成功"
+// @Failure 400,401,403,404 {object} response.Response "错误详情"
+// @Router /api/v1/topics/{id}/images [post]
+func (h *Handler) AddTopicImage(c *gin.Context) {
+	userID := h.GetCurrentUserID(c)
+	if userID == 0 {
+		Error(c, errors.ErrUnauthorized)
+		return
+	}
+
+	topicID, err := ParseUint64Param(c, "id")
+	if err != nil {
+		Error(c, errors.New(errors.CodeValidation, "无效的话题ID"))
+		return
+	}
+
+	file, err := c.FormFile("image")
+	if err != nil {
+		logger.Error("获取上传文件失败",
+			logger.String("path", c.Request.URL.Path),
+			logger.Any("error", err),
+			logger.Uint64("topic_id", topicID))
+		Error(c, errors.New(errors.CodeValidation, "无效的图片文件"))
+		return
+	}
+
+	image := &model.File{
+		File: file,
+		Type: "image",
+		Name: file.Filename,
+		Size: uint(file.Size),
+	}
+	images := []*model.File{image}
+
+	if err := h.topicService.AddTopicImage(c, topicID, images); err != nil {
+		logger.Error("添加话题图片失败",
+			logger.String("path", c.Request.URL.Path),
+			logger.Any("error", err),
+			logger.Uint64("topic_id", topicID))
+		Error(c, errors.Wrap(err, errors.CodeOperation, "添加图片失败"))
+		return
+	}
+
+	Success(c, nil)
 }

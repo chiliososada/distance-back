@@ -6,11 +6,16 @@ import (
 	"github.com/chiliososada/distance-back/internal/model"
 )
 
-// UserResponse 用户信息响应
-type UserResponse struct {
-	ID               uint64     `json:"id"`
-	Nickname         string     `json:"nickname"`
-	AvatarURL        string     `json:"avatar_url"`
+// UserBrief 用户简要信息
+type UserBrief struct {
+	ID        uint64 `json:"id"`
+	Nickname  string `json:"nickname"`
+	AvatarURL string `json:"avatar_url"`
+}
+
+// UserInfo 用户基础信息
+type UserInfo struct {
+	UserBrief
 	Bio              string     `json:"bio"`
 	Gender           string     `json:"gender"`
 	BirthDate        *time.Time `json:"birth_date,omitempty"`
@@ -22,9 +27,9 @@ type UserResponse struct {
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
-// UserProfileResponse 用户详细资料响应
-type UserProfileResponse struct {
-	UserResponse
+// UserProfile 用户完整资料
+type UserProfile struct {
+	UserInfo
 	Stats        UserStats     `json:"stats"`
 	Relationship *Relationship `json:"relationship,omitempty"`
 }
@@ -49,19 +54,25 @@ type Relationship struct {
 type Location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
-	Distance  float64 `json:"distance,omitempty"` // 米
+	Distance  float64 `json:"distance,omitempty"`
 }
 
-// ToResponse 将用户模型转换为响应
-func ToResponse(user *model.User) *UserResponse {
+// 使用泛型定义分页响应类型
+type UserListResponse = PaginatedResponse[*UserInfo]
+type UserBriefListResponse = PaginatedResponse[*UserBrief]
+
+// ToUserInfo 转换为用户信息
+func ToUserInfo(user *model.User) *UserInfo {
 	if user == nil {
 		return nil
 	}
 
-	resp := &UserResponse{
-		ID:               user.ID,
-		Nickname:         user.Nickname,
-		AvatarURL:        user.AvatarURL,
+	info := &UserInfo{
+		UserBrief: UserBrief{
+			ID:        user.ID,
+			Nickname:  user.Nickname,
+			AvatarURL: user.AvatarURL,
+		},
 		Bio:              user.Bio,
 		Gender:           user.Gender,
 		PrivacyLevel:     user.PrivacyLevel,
@@ -72,15 +83,45 @@ func ToResponse(user *model.User) *UserResponse {
 	}
 
 	if user.BirthDate != nil {
-		resp.BirthDate = user.BirthDate
+		info.BirthDate = user.BirthDate
 	}
 
 	if user.LocationLatitude != 0 || user.LocationLongitude != 0 {
-		resp.Location = &Location{
+		info.Location = &Location{
 			Latitude:  user.LocationLatitude,
 			Longitude: user.LocationLongitude,
 		}
 	}
 
-	return resp
+	return info
+}
+
+// ToUserProfile 转换为用户完整资料
+func ToUserProfile(user *model.User) *UserProfile {
+	if user == nil {
+		return nil
+	}
+
+	return &UserProfile{
+		UserInfo: *ToUserInfo(user),
+		Stats: UserStats{
+			TopicsCount:    user.TopicsCount,
+			FollowersCount: user.FollowersCount,
+			FollowingCount: user.FollowingCount,
+			FriendsCount:   user.FriendsCount,
+		},
+	}
+}
+
+// ToUserBrief 转换为用户简要信息
+func ToUserBrief(user *model.User) *UserBrief {
+	if user == nil {
+		return nil
+	}
+
+	return &UserBrief{
+		ID:        user.ID,
+		Nickname:  user.Nickname,
+		AvatarURL: user.AvatarURL,
+	}
 }

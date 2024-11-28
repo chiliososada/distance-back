@@ -6,10 +6,42 @@ import (
 
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
+	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/chiliososada/distance-back/pkg/storage"
 )
 
+// 服务层参数结构定义
+type (
+	// GroupCreateOptions 创建群聊参数
+	GroupCreateOptions struct {
+		Name           string
+		Announcement   string
+		InitialMembers []uint64
+	}
+
+	// MessageCreateOptions 发送消息参数
+	MessageCreateOptions struct {
+		ContentType string
+		Content     string
+		Files       []*model.File
+	}
+
+	// RoomUpdateOptions 更新聊天室参数
+	RoomUpdateOptions struct {
+		Name         string
+		Announcement string
+	}
+
+	// MemberUpdateOptions 更新成员参数
+	MemberUpdateOptions struct {
+		Role     string
+		Nickname string
+		IsMuted  *bool
+	}
+)
+
+// ChatService 聊天服务
 type ChatService struct {
 	chatRepo       repository.ChatRepository
 	userRepo       repository.UserRepository
@@ -44,11 +76,11 @@ func (s *ChatService) CreatePrivateRoom(ctx context.Context, userID1, userID2 ui
 	// 检查用户是否存在
 	user1, err := s.userRepo.GetByID(ctx, userID1)
 	if err != nil || user1 == nil {
-		return nil, ErrUserNotFound
+		return nil, errors.ErrUserNotFound
 	}
 	user2, err := s.userRepo.GetByID(ctx, userID2)
 	if err != nil || user2 == nil {
-		return nil, ErrUserNotFound
+		return nil, errors.ErrUserNotFound
 	}
 
 	// 检查是否已经存在私聊房间
@@ -60,18 +92,15 @@ func (s *ChatService) CreatePrivateRoom(ctx context.Context, userID1, userID2 ui
 		return existingRoom, nil
 	}
 
-	// 创建新的私聊房间
 	room := &model.ChatRoom{
 		Name: fmt.Sprintf("%s & %s", user1.Nickname, user2.Nickname),
 		Type: "individual",
 	}
 
-	// 创建房间
 	if err := s.chatRepo.CreateRoom(ctx, room); err != nil {
 		return nil, fmt.Errorf("failed to create chat room: %w", err)
 	}
 
-	// 添加成员
 	members := []*model.ChatRoomMember{
 		{
 			ChatRoomID: room.ID,
@@ -97,30 +126,27 @@ func (s *ChatService) CreatePrivateRoom(ctx context.Context, userID1, userID2 ui
 }
 
 // CreateGroupRoom 创建群聊房间
-func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorID uint64, name string, initialMembers []uint64) (*model.ChatRoom, error) {
-	// 验证创建者
+func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorID uint64, opts GroupCreateOptions) (*model.ChatRoom, error) {
 	creator, err := s.userRepo.GetByID(ctx, creatorID)
 	if err != nil || creator == nil {
-		return nil, ErrUserNotFound
+		return nil, errors.ErrUserNotFound
 	}
 
-	// 验证初始成员数量
-	if len(initialMembers) > s.maxRoomMembers {
+	if len(opts.InitialMembers) > s.maxRoomMembers {
 		return nil, fmt.Errorf("number of members exceeds maximum limit of %d", s.maxRoomMembers)
 	}
 
-	// 创建群聊房间
 	room := &model.ChatRoom{
-		Name: name,
-		Type: "group",
+		Name:         opts.Name,
+		Type:         "group",
+		Announcement: opts.Announcement,
 	}
 
-	// 创建房间
 	if err := s.chatRepo.CreateRoom(ctx, room); err != nil {
 		return nil, fmt.Errorf("failed to create chat room: %w", err)
 	}
 
-	// 添加创建者为管理员
+	// 添加创建者为群主
 	creatorMember := &model.ChatRoomMember{
 		ChatRoomID: room.ID,
 		UserID:     creatorID,
@@ -132,7 +158,7 @@ func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorID uint64, nam
 	}
 
 	// 添加初始成员
-	for _, memberID := range initialMembers {
+	for _, memberID := range opts.InitialMembers {
 		if memberID == creatorID {
 			continue
 		}
@@ -160,29 +186,24 @@ func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorID uint64, nam
 }
 
 // SendMessage 发送消息
-func (s *ChatService) SendMessage(ctx context.Context, userID uint64, roomID uint64, msgType string, content string, files []*model.File) (*model.Message, error) {
-	// 检查发送者是否是房间成员
+func (s *ChatService) SendMessage(ctx context.Context, userID uint64, roomID uint64, opts MessageCreateOptions) (*model.Message, error) {
 	if !s.isRoomMember(ctx, roomID, userID) {
-		return nil, ErrNotRoomMember
+		return nil, errors.ErrNotChatMember
 	}
 
-	// 创建消息
 	msg := &model.Message{
 		ChatRoomID:  roomID,
 		SenderID:    userID,
-		ContentType: msgType,
-		Content:     content,
+		ContentType: opts.ContentType,
+		Content:     opts.Content,
 	}
 
-	// 发送消息
 	if err := s.chatRepo.CreateMessage(ctx, msg); err != nil {
 		return nil, fmt.Errorf("failed to create message: %w", err)
 	}
 
-	// 处理媒体文件
-	if len(files) > 0 {
-		for _, file := range files {
-			// 上传文件
+	if len(opts.Files) > 0 {
+		for _, file := range opts.Files {
 			fileURL, err := s.storage.UploadFile(ctx, file.File, storage.ChatDirectory)
 			if err != nil {
 				logger.Error("failed to upload message media",
@@ -191,7 +212,6 @@ func (s *ChatService) SendMessage(ctx context.Context, userID uint64, roomID uin
 				continue
 			}
 
-			// 创建媒体记录
 			media := &model.MessageMedia{
 				MessageID: msg.ID,
 				MediaType: file.Type,
@@ -208,18 +228,15 @@ func (s *ChatService) SendMessage(ctx context.Context, userID uint64, roomID uin
 		}
 	}
 
-	// 更新房间成员的未读消息状态
-	// 实际项目中，这里应该通过消息队列异步处理
 	go s.updateMembersUnreadStatus(ctx, roomID, msg.ID)
 
 	return msg, nil
 }
 
 // GetMessages 获取消息历史
-func (s *ChatService) GetMessages(ctx context.Context, userID, roomID uint64, beforeID uint64, limit int) ([]*model.Message, error) {
-	// 检查用户是否是房间成员
+func (s *ChatService) GetMessages(ctx context.Context, userID uint64, roomID uint64, beforeID uint64, limit int) ([]*model.Message, error) {
 	if !s.isRoomMember(ctx, roomID, userID) {
-		return nil, ErrNotRoomMember
+		return nil, errors.ErrNotChatMember
 	}
 
 	if limit <= 0 || limit > DefaultMessageLimit {
@@ -229,48 +246,111 @@ func (s *ChatService) GetMessages(ctx context.Context, userID, roomID uint64, be
 	return s.chatRepo.GetMessagesByRoom(ctx, roomID, beforeID, limit)
 }
 
-// MarkMessagesAsRead 标记消息为已读
-func (s *ChatService) MarkMessagesAsRead(ctx context.Context, userID, roomID uint64, messageID uint64) error {
-	// 更新成员的最后读取消息ID
+// MarkMessagesAsRead 标记消息已读
+func (s *ChatService) MarkMessagesAsRead(ctx context.Context, userID uint64, roomID uint64, messageID uint64) error {
 	member, err := s.getMemberInfo(ctx, roomID, userID)
 	if err != nil {
 		return err
 	}
 	if member == nil {
-		return ErrNotRoomMember
+		return errors.ErrNotChatMember
+	}
+
+	// 验证消息是否存在且属于该聊天室
+	messages, err := s.chatRepo.GetMessagesByRoom(ctx, roomID, messageID+1, 1)
+	if err != nil {
+		return err
+	}
+	if len(messages) == 0 || messages[0].ID > messageID {
+		return errors.New(errors.CodeMessageNotFound, "Message not found")
 	}
 
 	member.LastReadMessageID = messageID
 	return s.chatRepo.UpdateMember(ctx, member)
 }
 
+// UpdateRoom 更新聊天室信息
+func (s *ChatService) UpdateRoom(ctx context.Context, operatorID uint64, roomID uint64, opts RoomUpdateOptions) error {
+	member, err := s.getMemberInfo(ctx, roomID, operatorID)
+	if err != nil {
+		return err
+	}
+	if member == nil || member.Role == "member" {
+		return errors.ErrForbidden
+	}
+
+	room, err := s.chatRepo.GetRoomByID(ctx, roomID)
+	if err != nil {
+		return err
+	}
+	if room == nil {
+		return errors.ErrChatRoomNotFound
+	}
+
+	if opts.Name != "" {
+		room.Name = opts.Name
+	}
+	if opts.Announcement != "" {
+		room.Announcement = opts.Announcement
+	}
+
+	return s.chatRepo.UpdateRoom(ctx, room)
+}
+
+// UpdateRoomAvatar 更新聊天室头像
+func (s *ChatService) UpdateRoomAvatar(ctx context.Context, operatorID uint64, roomID uint64, avatar *model.File) (*model.ChatRoom, error) {
+	member, err := s.getMemberInfo(ctx, roomID, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	if member == nil || member.Role == "member" {
+		return nil, errors.ErrForbidden
+	}
+
+	fileURL, err := s.storage.UploadFile(ctx, avatar.File, storage.ChatDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload avatar: %w", err)
+	}
+
+	room, err := s.chatRepo.GetRoomByID(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+	if room == nil {
+		return nil, errors.ErrChatRoomNotFound
+	}
+
+	room.AvatarURL = fileURL
+	if err := s.chatRepo.UpdateRoom(ctx, room); err != nil {
+		return nil, err
+	}
+
+	return room, nil
+}
+
 // AddMember 添加成员到群聊
-func (s *ChatService) AddMember(ctx context.Context, operatorID, roomID, userID uint64) error {
-	// 检查操作者权限
+func (s *ChatService) AddMember(ctx context.Context, operatorID uint64, roomID uint64, userID uint64) error {
 	operatorMember, err := s.getMemberInfo(ctx, roomID, operatorID)
 	if err != nil {
 		return err
 	}
 	if operatorMember == nil || operatorMember.Role == "member" {
-		return ErrForbidden
+		return errors.ErrForbidden
 	}
 
-	// 检查用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil || user == nil {
-		return ErrUserNotFound
+		return errors.ErrUserNotFound
 	}
 
-	// 检查是否已是成员
 	existingMember, err := s.getMemberInfo(ctx, roomID, userID)
 	if err != nil {
 		return err
 	}
 	if existingMember != nil {
-		return ErrConflict
+		return errors.New(errors.CodeDuplicate, "User is already a member")
 	}
 
-	// 检查成员数量限制
 	members, err := s.chatRepo.GetRoomMembers(ctx, roomID)
 	if err != nil {
 		return err
@@ -279,7 +359,6 @@ func (s *ChatService) AddMember(ctx context.Context, operatorID, roomID, userID 
 		return fmt.Errorf("room member limit reached")
 	}
 
-	// 添加新成员
 	member := &model.ChatRoomMember{
 		ChatRoomID: roomID,
 		UserID:     userID,
@@ -291,59 +370,74 @@ func (s *ChatService) AddMember(ctx context.Context, operatorID, roomID, userID 
 }
 
 // RemoveMember 从群聊中移除成员
-func (s *ChatService) RemoveMember(ctx context.Context, operatorID, roomID, userID uint64) error {
-	// 检查操作者权限
+func (s *ChatService) RemoveMember(ctx context.Context, operatorID uint64, roomID uint64, userID uint64) error {
 	operatorMember, err := s.getMemberInfo(ctx, roomID, operatorID)
 	if err != nil {
 		return err
 	}
 	if operatorMember == nil || operatorMember.Role == "member" {
-		return ErrForbidden
+		return errors.ErrForbidden
 	}
 
-	// 不能移除群主
 	targetMember, err := s.getMemberInfo(ctx, roomID, userID)
 	if err != nil {
 		return err
 	}
 	if targetMember == nil {
-		return ErrNotRoomMember
+		return errors.ErrNotChatMember
 	}
 	if targetMember.Role == "owner" {
-		return ErrForbidden
+		return errors.ErrForbidden
 	}
 
 	return s.chatRepo.RemoveMember(ctx, roomID, userID)
 }
 
-// UpdateMemberRole 更新成员角色
-func (s *ChatService) UpdateMemberRole(ctx context.Context, operatorID, roomID, userID uint64, newRole string) error {
-	// 检查操作者权限
+// UpdateMember 更新成员信息
+func (s *ChatService) UpdateMember(ctx context.Context, operatorID uint64, roomID uint64, memberID uint64, opts MemberUpdateOptions) error {
 	operatorMember, err := s.getMemberInfo(ctx, roomID, operatorID)
 	if err != nil {
 		return err
 	}
-	if operatorMember == nil || operatorMember.Role != "owner" {
-		return ErrForbidden
+	if operatorMember == nil || operatorMember.Role == "member" {
+		return errors.ErrForbidden
 	}
 
-	// 获取目标成员
-	member, err := s.getMemberInfo(ctx, roomID, userID)
+	member, err := s.getMemberInfo(ctx, roomID, memberID)
 	if err != nil {
 		return err
 	}
 	if member == nil {
-		return ErrNotRoomMember
+		return errors.ErrNotChatMember
 	}
 
-	// 更新角色
-	member.Role = newRole
+	if member.Role == "owner" || (member.Role == "admin" && operatorMember.Role != "owner") {
+		return errors.ErrForbidden
+	}
+
+	if opts.Role != "" {
+		member.Role = opts.Role
+	}
+	if opts.Nickname != "" {
+		member.Nickname = opts.Nickname
+	}
+	if opts.IsMuted != nil {
+		member.IsMuted = *opts.IsMuted
+	}
+
 	return s.chatRepo.UpdateMember(ctx, member)
 }
 
-// GetRoomInfo 获取聊天室信息
+// GetRoomInfo 获取聊天室信息 (续)
 func (s *ChatService) GetRoomInfo(ctx context.Context, roomID uint64) (*model.ChatRoom, error) {
-	return s.chatRepo.GetRoomByID(ctx, roomID)
+	room, err := s.chatRepo.GetRoomByID(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+	if room == nil {
+		return nil, errors.ErrChatRoomNotFound
+	}
+	return room, nil
 }
 
 // ListUserRooms 获取用户的聊天室列表
@@ -352,7 +446,130 @@ func (s *ChatService) ListUserRooms(ctx context.Context, userID uint64, page, pa
 	return s.chatRepo.ListUserRooms(ctx, userID, offset, pageSize)
 }
 
-// 辅助方法
+// GetUnreadCount 获取未读消息数
+func (s *ChatService) GetUnreadCount(ctx context.Context, userID uint64, roomID uint64) (uint64, error) {
+	member, err := s.getMemberInfo(ctx, roomID, userID)
+	if err != nil {
+		return 0, err
+	}
+	if member == nil {
+		return 0, errors.ErrNotChatMember
+	}
+
+	// 获取最新消息ID
+	messages, err := s.chatRepo.GetLatestMessages(ctx, roomID, 1)
+	if err != nil {
+		return 0, err
+	}
+	if len(messages) == 0 {
+		return 0, nil
+	}
+
+	latestMessageID := messages[0].ID
+	if latestMessageID <= member.LastReadMessageID {
+		return 0, nil
+	}
+
+	return latestMessageID - member.LastReadMessageID, nil
+}
+
+// LeaveRoom 退出聊天室
+func (s *ChatService) LeaveRoom(ctx context.Context, userID uint64, roomID uint64) error {
+	member, err := s.getMemberInfo(ctx, roomID, userID)
+	if err != nil {
+		return err
+	}
+	if member == nil {
+		return errors.ErrNotChatMember
+	}
+
+	// 群主不能退出群聊
+	if member.Role == "owner" {
+		return errors.New(errors.CodeForbidden, "Owner cannot leave the room")
+	}
+
+	return s.chatRepo.RemoveMember(ctx, roomID, userID)
+}
+
+// GetRoomMembers 获取成员列表
+func (s *ChatService) GetRoomMembers(ctx context.Context, roomID uint64, page, size int) ([]*model.ChatRoomMember, int64, error) {
+	// 获取总数
+	members, err := s.chatRepo.GetRoomMembers(ctx, roomID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := int64(len(members))
+
+	// 计算分页
+	start := (page - 1) * size
+	end := start + size
+	if start >= len(members) {
+		return []*model.ChatRoomMember{}, total, nil
+	}
+	if end > len(members) {
+		end = len(members)
+	}
+
+	return members[start:end], total, nil
+}
+
+// PinRoom 置顶聊天室
+func (s *ChatService) PinRoom(ctx context.Context, userID uint64, roomID uint64) error {
+	if !s.isRoomMember(ctx, roomID, userID) {
+		return errors.ErrNotChatMember
+	}
+
+	return s.chatRepo.PinRoom(ctx, userID, roomID)
+}
+
+// UnpinRoom 取消置顶聊天室
+func (s *ChatService) UnpinRoom(ctx context.Context, userID uint64, roomID uint64) error {
+	return s.chatRepo.UnpinRoom(ctx, userID, roomID)
+}
+
+// updateMembersUnreadStatus 更新成员未读状态
+func (s *ChatService) updateMembersUnreadStatus(ctx context.Context, roomID uint64, messageID uint64) {
+	members, err := s.chatRepo.GetRoomMembers(ctx, roomID)
+	if err != nil {
+		logger.Error("failed to get room members",
+			logger.Uint64("room_id", roomID),
+			logger.Any("error", err))
+		return
+	}
+
+	for _, member := range members {
+		if member.LastReadMessageID < messageID {
+			logger.Info("new message notification",
+				logger.Uint64("user_id", member.UserID),
+				logger.Uint64("room_id", roomID),
+				logger.Uint64("message_id", messageID))
+		}
+	}
+}
+
+// Helper methods
+
+// isRoomMember 检查用户是否是房间成员
+func (s *ChatService) isRoomMember(ctx context.Context, roomID, userID uint64) bool {
+	member, _ := s.getMemberInfo(ctx, roomID, userID)
+	return member != nil
+}
+
+// getMemberInfo 获取成员信息
+func (s *ChatService) getMemberInfo(ctx context.Context, roomID, userID uint64) (*model.ChatRoomMember, error) {
+	members, err := s.chatRepo.GetRoomMembers(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, member := range members {
+		if member.UserID == userID {
+			return member, nil
+		}
+	}
+
+	return nil, nil
+}
 
 // findPrivateRoom 查找两个用户之间的私聊房间
 func (s *ChatService) findPrivateRoom(ctx context.Context, userID1, userID2 uint64) (*model.ChatRoom, error) {
@@ -383,239 +600,4 @@ func (s *ChatService) findPrivateRoom(ctx context.Context, userID1, userID2 uint
 	}
 
 	return nil, nil
-}
-
-// isRoomMember 检查用户是否是房间成员
-func (s *ChatService) isRoomMember(ctx context.Context, roomID, userID uint64) bool {
-	member, _ := s.getMemberInfo(ctx, roomID, userID)
-	return member != nil
-}
-
-// getMemberInfo 获取成员信息
-func (s *ChatService) getMemberInfo(ctx context.Context, roomID, userID uint64) (*model.ChatRoomMember, error) {
-	members, err := s.chatRepo.GetRoomMembers(ctx, roomID)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, member := range members {
-		if member.UserID == userID {
-			return member, nil
-		}
-	}
-
-	return nil, nil
-}
-
-// updateMembersUnreadStatus 更新成员未读状态
-func (s *ChatService) updateMembersUnreadStatus(ctx context.Context, roomID uint64, messageID uint64) {
-	members, err := s.chatRepo.GetRoomMembers(ctx, roomID)
-	if err != nil {
-		logger.Error("failed to get room members",
-			logger.Uint64("room_id", roomID),
-			logger.Any("error", err))
-		return
-	}
-
-	for _, member := range members {
-		// 更新未读消息数
-		if member.LastReadMessageID < messageID {
-			// 这里应该通过WebSocket或推送通知用户有新消息
-			// 实际项目中应该通过消息队列处理
-			logger.Info("new message notification",
-				logger.Uint64("user_id", member.UserID),
-				logger.Uint64("room_id", roomID),
-				logger.Uint64("message_id", messageID))
-		}
-	}
-}
-
-// PinRoom 置顶聊天室
-func (s *ChatService) PinRoom(ctx context.Context, userID, roomID uint64) error {
-	// 检查用户是否是房间成员
-	if !s.isRoomMember(ctx, roomID, userID) {
-		return ErrNotRoomMember
-	}
-
-	return s.chatRepo.PinRoom(ctx, userID, roomID)
-}
-
-// UnpinRoom 取消置顶聊天室
-func (s *ChatService) UnpinRoom(ctx context.Context, userID, roomID uint64) error {
-	return s.chatRepo.UnpinRoom(ctx, userID, roomID)
-}
-
-// GetPinnedRooms 获取用户置顶的聊天室列表
-func (s *ChatService) GetPinnedRooms(ctx context.Context, userID uint64) ([]*model.ChatRoom, error) {
-	return s.chatRepo.GetPinnedRooms(ctx, userID)
-}
-
-// UpdateRoomInfo 更新聊天室信息
-func (s *ChatService) UpdateRoomInfo(ctx context.Context, operatorID uint64, room *model.ChatRoom) error {
-	// 检查操作者权限
-	member, err := s.getMemberInfo(ctx, room.ID, operatorID)
-	if err != nil {
-		return err
-	}
-	if member == nil || member.Role == "member" {
-		return ErrForbidden
-	}
-
-	// 获取现有房间信息
-	existingRoom, err := s.chatRepo.GetRoomByID(ctx, room.ID)
-	if err != nil {
-		return err
-	}
-	if existingRoom == nil {
-		return ErrChatRoomNotFound
-	}
-
-	// 只更新允许的字段
-	existingRoom.Name = room.Name
-	existingRoom.Announcement = room.Announcement
-	if room.AvatarURL != "" {
-		existingRoom.AvatarURL = room.AvatarURL
-	}
-
-	return s.chatRepo.UpdateRoom(ctx, existingRoom)
-}
-
-// UpdateRoomAvatar 更新聊天室头像
-func (s *ChatService) UpdateRoomAvatar(ctx context.Context, operatorID uint64, roomID uint64, avatar *model.File) error {
-	// 检查操作者权限
-	member, err := s.getMemberInfo(ctx, roomID, operatorID)
-	if err != nil {
-		return err
-	}
-	if member == nil || member.Role == "member" {
-		return ErrForbidden
-	}
-
-	// 上传新头像
-	fileURL, err := s.storage.UploadFile(ctx, avatar.File, storage.ChatDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to upload avatar: %w", err)
-	}
-
-	// 更新房间头像
-	room, err := s.chatRepo.GetRoomByID(ctx, roomID)
-	if err != nil {
-		return err
-	}
-	if room == nil {
-		return ErrChatRoomNotFound
-	}
-
-	room.AvatarURL = fileURL
-	return s.chatRepo.UpdateRoom(ctx, room)
-}
-
-// MuteMember 将成员禁言
-func (s *ChatService) MuteMember(ctx context.Context, operatorID, roomID, userID uint64) error {
-	// 检查操作者权限
-	operatorMember, err := s.getMemberInfo(ctx, roomID, operatorID)
-	if err != nil {
-		return err
-	}
-	if operatorMember == nil || operatorMember.Role == "member" {
-		return ErrForbidden
-	}
-
-	// 获取目标成员
-	member, err := s.getMemberInfo(ctx, roomID, userID)
-	if err != nil {
-		return err
-	}
-	if member == nil {
-		return ErrNotRoomMember
-	}
-
-	// 不能禁言权限更高的成员
-	if member.Role == "owner" || (member.Role == "admin" && operatorMember.Role != "owner") {
-		return ErrForbidden
-	}
-
-	member.IsMuted = true
-	return s.chatRepo.UpdateMember(ctx, member)
-}
-
-// UnmuteMember 解除成员禁言
-func (s *ChatService) UnmuteMember(ctx context.Context, operatorID, roomID, userID uint64) error {
-	// 检查操作者权限
-	operatorMember, err := s.getMemberInfo(ctx, roomID, operatorID)
-	if err != nil {
-		return err
-	}
-	if operatorMember == nil || operatorMember.Role == "member" {
-		return ErrForbidden
-	}
-
-	// 获取目标成员
-	member, err := s.getMemberInfo(ctx, roomID, userID)
-	if err != nil {
-		return err
-	}
-	if member == nil {
-		return ErrNotRoomMember
-	}
-
-	member.IsMuted = false
-	return s.chatRepo.UpdateMember(ctx, member)
-}
-
-// UpdateMemberNickname 更新成员在群内的昵称
-func (s *ChatService) UpdateMemberNickname(ctx context.Context, roomID, userID uint64, nickname string) error {
-	member, err := s.getMemberInfo(ctx, roomID, userID)
-	if err != nil {
-		return err
-	}
-	if member == nil {
-		return ErrNotRoomMember
-	}
-
-	member.Nickname = nickname
-	return s.chatRepo.UpdateMember(ctx, member)
-}
-
-// GetUnreadCount 获取未读消息数
-func (s *ChatService) GetUnreadCount(ctx context.Context, userID, roomID uint64) (uint64, error) {
-	member, err := s.getMemberInfo(ctx, roomID, userID)
-	if err != nil {
-		return 0, err
-	}
-	if member == nil {
-		return 0, ErrNotRoomMember
-	}
-
-	// 获取最新消息ID
-	messages, err := s.chatRepo.GetLatestMessages(ctx, roomID, 1)
-	if err != nil {
-		return 0, err
-	}
-	if len(messages) == 0 {
-		return 0, nil
-	}
-
-	latestMessageID := messages[0].ID
-	if latestMessageID <= member.LastReadMessageID {
-		return 0, nil
-	}
-
-	// 计算未读消息数
-	return latestMessageID - member.LastReadMessageID, nil
-}
-
-// SearchMessages 搜索消息
-func (s *ChatService) SearchMessages(ctx context.Context, userID, roomID uint64, keyword string, page, pageSize int) ([]*model.Message, int64, error) {
-	if !s.isRoomMember(ctx, roomID, userID) {
-		return nil, 0, ErrNotRoomMember
-	}
-
-	// TODO: 实现消息搜索功能
-	return nil, 0, nil
-}
-
-// GetMemberList 获取聊天室成员列表
-func (s *ChatService) GetMemberList(ctx context.Context, roomID uint64) ([]*model.ChatRoomMember, error) {
-	return s.chatRepo.GetRoomMembers(ctx, roomID)
 }

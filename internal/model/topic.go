@@ -21,18 +21,20 @@ const (
 // Topic 话题模型
 type Topic struct {
 	BaseModel
-	UserID            uint64    `gorm:"index:idx_user_time" json:"user_id"`
-	Title             string    `gorm:"size:255" json:"title"`
-	Content           string    `gorm:"type:text" json:"content"`
-	LocationLatitude  float64   `gorm:"type:decimal(10,8)" json:"location_latitude"`
-	LocationLongitude float64   `gorm:"type:decimal(11,8)" json:"location_longitude"`
-	LikesCount        uint      `gorm:"default:0" json:"likes_count"`        // 点赞数
-	ParticipantsCount uint      `gorm:"default:0" json:"participants_count"` // 参与人数
-	ViewsCount        uint      `gorm:"default:0" json:"views_count"`        // 浏览数
-	SharesCount       uint      `gorm:"default:0" json:"shares_count"`       // 分享数
-	ExpiresAt         time.Time `json:"expires_at"`                          // 过期时间
-	Status            string    `gorm:"type:enum('active','closed','cancelled');default:'active'" json:"status"`
-	User              User      `gorm:"foreignKey:UserID" json:"user"`
+	UserID            uint64       `gorm:"index:idx_user_time" json:"user_id"`
+	Title             string       `gorm:"size:255" json:"title"`
+	Content           string       `gorm:"type:text" json:"content"`
+	LocationLatitude  float64      `gorm:"type:decimal(10,8)" json:"location_latitude"`
+	LocationLongitude float64      `gorm:"type:decimal(11,8)" json:"location_longitude"`
+	LikesCount        uint         `gorm:"default:0" json:"likes_count"`        // 点赞数
+	ParticipantsCount uint         `gorm:"default:0" json:"participants_count"` // 参与人数
+	ViewsCount        uint         `gorm:"default:0" json:"views_count"`        // 浏览数
+	SharesCount       uint         `gorm:"default:0" json:"shares_count"`       // 分享数
+	ExpiresAt         time.Time    `json:"expires_at"`                          // 过期时间
+	Status            string       `gorm:"type:enum('active','closed','cancelled');default:'active'" json:"status"`
+	User              User         `gorm:"foreignKey:UserID" json:"user"`
+	TopicImages       []TopicImage `gorm:"foreignKey:TopicID" json:"topic_images"`
+	TopicTags         []TopicTag   `gorm:"foreignKey:TopicID" json:"topic_tags"`
 }
 
 // TopicImage 话题图片模型

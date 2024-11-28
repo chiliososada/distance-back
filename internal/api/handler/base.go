@@ -3,25 +3,15 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/service"
-	"github.com/chiliososada/distance-back/pkg/errors" // 添加这个导入
+	"github.com/chiliososada/distance-back/pkg/errors"
+	"github.com/chiliososada/distance-back/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
-
-// Response 标准响应结构
-type Response struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-}
-
-// PaginationQuery 分页查询参数
-type PaginationQuery struct {
-	Page     int `form:"page" binding:"required,min=1"`
-	PageSize int `form:"page_size" binding:"required,min=1,max=100"`
-}
 
 // Handler 处理器基础结构
 type Handler struct {
@@ -48,29 +38,38 @@ func NewHandler(
 
 // Success 返回成功响应
 func Success(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, Response{
-		Code:    0,
-		Message: "success",
-		Data:    data,
-	})
+	c.JSON(http.StatusOK, response.SuccessResponse(data))
 }
 
 // Error 返回错误响应
 func Error(c *gin.Context, err error) {
 	// 处理应用错误
-	if e, ok := err.(*errors.AppError); ok { // 修改这里
-		c.JSON(e.HTTPStatus, Response{
+	if e, ok := err.(*errors.AppError); ok {
+		logger.Error("Application error",
+			logger.String("path", c.Request.URL.Path),
+			logger.Int("code", e.Code),
+			logger.String("message", e.Message),
+			logger.Any("details", e.Details),
+			logger.String("developer", e.Developer))
+
+		c.JSON(e.HTTPStatus, response.Response{
 			Code:    e.Code,
 			Message: e.Message,
 			Data:    e.Details,
+			TraceID: GetTraceID(c),
 		})
 		return
 	}
 
 	// 处理其他错误
-	c.JSON(http.StatusInternalServerError, Response{
-		Code:    500,
-		Message: err.Error(),
+	logger.Error("Internal server error",
+		logger.String("path", c.Request.URL.Path),
+		logger.Any("error", err))
+
+	c.JSON(http.StatusInternalServerError, response.Response{
+		Code:    errors.CodeUnknown,
+		Message: "Internal server error",
+		TraceID: GetTraceID(c),
 	})
 }
 
@@ -86,14 +85,153 @@ func (h *Handler) GetCurrentUserID(c *gin.Context) uint64 {
 // ParseUint64Param 解析uint64类型的路径参数
 func ParseUint64Param(c *gin.Context, param string) (uint64, error) {
 	val := c.Param(param)
-	return strconv.ParseUint(val, 10, 64)
+	id, err := strconv.ParseUint(val, 10, 64)
+	if err != nil {
+		return 0, errors.New(errors.CodeValidation, "Invalid parameter").
+			WithDeveloper(err.Error())
+	}
+	return id, nil
+}
+
+// ParseDateRange 解析日期范围
+func ParseDateRange(startDate, endDate string) (time.Time, time.Time, error) {
+	var start, end time.Time
+	var err error
+
+	if startDate != "" {
+		start, err = time.Parse("2006-01-02", startDate)
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New(errors.CodeValidation, "Invalid start date format").
+				WithDeveloper(err.Error()).
+				WithDetails(map[string]string{
+					"start_date": startDate,
+					"format":     "2006-01-02",
+				})
+		}
+	} else {
+		start = time.Now().AddDate(0, -1, 0)
+	}
+
+	if endDate != "" {
+		end, err = time.Parse("2006-01-02", endDate)
+		if err != nil {
+			return time.Time{}, time.Time{}, errors.New(errors.CodeValidation, "Invalid end date format").
+				WithDeveloper(err.Error()).
+				WithDetails(map[string]string{
+					"end_date": endDate,
+					"format":   "2006-01-02",
+				})
+		}
+	} else {
+		end = time.Now()
+	}
+
+	// 验证日期范围
+	if end.Before(start) {
+		return time.Time{}, time.Time{}, errors.New(errors.CodeValidation, "End date must be after start date").
+			WithDetails(map[string]string{
+				"start_date": start.Format("2006-01-02"),
+				"end_date":   end.Format("2006-01-02"),
+			})
+	}
+
+	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.Local)
+	end = time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 999999999, time.Local)
+
+	return start, end, nil
 }
 
 // GetPagination 获取分页参数
-func GetPagination(c *gin.Context) (*PaginationQuery, error) {
-	var query PaginationQuery
-	if err := c.ShouldBindQuery(&query); err != nil {
-		return nil, err
+func GetPagination(c *gin.Context) (page, size int, err error) {
+	pageStr := c.DefaultQuery("page", "1")
+	page, err = strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		return 0, 0, errors.New(errors.CodeValidation, "Invalid page parameter").
+			WithDeveloper(err.Error()).
+			WithDetails(map[string]interface{}{
+				"page": pageStr,
+				"min":  1,
+			})
 	}
-	return &query, nil
+
+	sizeStr := c.DefaultQuery("size", "10")
+	size, err = strconv.Atoi(sizeStr)
+	if err != nil || size < 1 || size > 100 {
+		return 0, 0, errors.New(errors.CodeValidation, "Invalid size parameter").
+			WithDeveloper(err.Error()).
+			WithDetails(map[string]interface{}{
+				"size":        sizeStr,
+				"valid_range": "1 to 100",
+			})
+	}
+
+	return page, size, nil
+}
+
+// GetSort 获取排序参数
+func GetSort(c *gin.Context) (string, string) {
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+	// 验证排序方向
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
+
+	return sortBy, sortOrder
+}
+
+// ValidateLocation 验证位置信息
+func ValidateLocation(latitude, longitude, radius float64) error {
+	if latitude < -90 || latitude > 90 {
+		return errors.New(errors.CodeInvalidLocation, "Invalid latitude").
+			WithDetails(map[string]interface{}{
+				"latitude":    latitude,
+				"valid_range": "-90 to 90",
+			})
+	}
+	if longitude < -180 || longitude > 180 {
+		return errors.New(errors.CodeInvalidLocation, "Invalid longitude").
+			WithDetails(map[string]interface{}{
+				"longitude":   longitude,
+				"valid_range": "-180 to 180",
+			})
+	}
+	if radius < 0 || radius > 50000 {
+		return errors.New(errors.CodeInvalidLocation, "Invalid radius").
+			WithDetails(map[string]interface{}{
+				"radius":      radius,
+				"valid_range": "0 to 50000",
+			})
+	}
+	return nil
+}
+
+// GetTraceID 获取请求追踪ID
+func GetTraceID(c *gin.Context) string {
+	return c.GetHeader("X-Request-ID")
+}
+
+// BindAndValidate 绑定并验证请求参数
+func BindAndValidate(c *gin.Context, obj interface{}) error {
+	if err := c.ShouldBind(obj); err != nil {
+		return errors.New(errors.CodeValidation, "Invalid request parameters").
+			WithDeveloper(err.Error()).
+			WithDetails(map[string]interface{}{
+				"error": err.Error(),
+			})
+	}
+	return nil
+}
+
+// BindQuery 绑定并验证查询参数
+func BindQuery(c *gin.Context, obj interface{}) error {
+	if err := c.ShouldBindQuery(obj); err != nil {
+		return errors.New(errors.CodeValidation, "Invalid query parameters").
+			WithDeveloper(err.Error()).
+			WithDetails(map[string]interface{}{
+				"error": err.Error(),
+			})
+	}
+	return nil
 }
