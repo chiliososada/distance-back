@@ -37,3 +37,13 @@ type NearbyTopicsRequest struct {
 type TopicInteractionRequest struct {
 	InteractionType string `json:"interaction_type" binding:"required,oneof=like favorite share"`
 }
+
+// AddTagsRequest 添加标签请求
+type AddTagsRequest struct {
+	Tags []string `json:"tags" binding:"required,min=1,dive,min=1,max=50"`
+}
+
+// RemoveTagsRequest 移除标签请求
+type RemoveTagsRequest struct {
+	TagIDs []uint64 `json:"tag_ids" binding:"required,min=1"`
+}

@@ -11,12 +11,15 @@ type RegisterRequest struct {
 
 // UpdateProfileRequest 更新用户资料请求
 type UpdateProfileRequest struct {
-	Nickname     string `json:"nickname" binding:"omitempty,min=2,max=50"`
-	Bio          string `json:"bio" binding:"omitempty,max=500"`
-	Gender       string `json:"gender" binding:"omitempty,oneof=male female other"`
-	BirthDate    string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
-	Language     string `json:"language" binding:"omitempty,len=5"`
-	PrivacyLevel string `json:"privacy_level" binding:"omitempty,oneof=public friends private"`
+	Nickname            string `json:"nickname" binding:"omitempty,min=2,max=50"`
+	Bio                 string `json:"bio" binding:"omitempty,max=500"`
+	Gender              string `json:"gender" binding:"omitempty,oneof=male female other"`
+	BirthDate           string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
+	Language            string `json:"language" binding:"omitempty,len=5"`
+	PrivacyLevel        string `json:"privacy_level" binding:"omitempty,oneof=public friends private"`
+	LocationSharing     bool   `json:"location_sharing"`
+	PhotoEnabled        bool   `json:"photo_enabled"`
+	NotificationEnabled bool   `json:"notification_enabled"`
 }
 
 // UpdateLocationRequest 更新位置请求
