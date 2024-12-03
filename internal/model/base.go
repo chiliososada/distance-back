@@ -7,7 +7,7 @@ import (
 
 // BaseModel 基础模型
 type BaseModel struct {
-	ID        uint64    `gorm:"primarykey" json:"id"`
+	UID       string    `gorm:"column:uid;type:varchar(36);primaryKey;not null;default:uuid()" json:"uid"`
 	CreatedAt time.Time `gorm:"index" json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

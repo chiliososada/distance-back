@@ -18,7 +18,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
-	//r.Use(middleware.ErrorHandler()) // 错误处理
+	r.Use(middleware.ErrorHandler()) // 错误处理
 	// r.Use(middleware.RequestLogger(config))    // 日志记录
 	// r.Use(middleware.CORS())                    // 跨域处理
 	// r.Use(middleware.Timeout(10 * time.Second)) // 超时控制
@@ -56,9 +56,11 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	authenticated := v1.Group("")
 	authenticated.Use(middleware.AuthRequired())
 	{
+
 		// 用户相关路由
 		users := authenticated.Group("/users")
 		{
+			print("1")
 			users.GET("/profile", h.GetProfile)      // 获取个人资料
 			users.PUT("/profile", h.UpdateProfile)   // 更新个人资料
 			users.PUT("/avatar", h.UpdateAvatar)     // 更新头像

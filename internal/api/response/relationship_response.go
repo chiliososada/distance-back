@@ -29,13 +29,21 @@ type RelationshipStatusResponse struct {
 	IsFollowed  bool `json:"is_followed"`  // 是否被关注
 	IsFriend    bool `json:"is_friend"`    // 是否好友
 	IsBlocked   bool `json:"is_blocked"`   // 是否拉黑
-	// IsPending   bool `json:"is_pending"`   // 是否待处理
+}
+
+// FriendResponse 好友响应
+type FriendResponse struct {
+	UserBrief
+	CommonFriends     int        `json:"common_friends"`                // 共同好友数
+	LastInteractionAt *time.Time `json:"last_interaction_at,omitempty"` // 最后互动时间
 }
 
 // 使用泛型定义分页响应类型
 type RelationshipListResponse = PaginatedResponse[*RelationshipResponse]
+type FriendListResponse = PaginatedResponse[*FriendResponse]
 
-// ToRelationshipResponse 转换为关系响应
+// Convert Functions
+
 func ToRelationshipResponse(relationship *model.UserRelationship) *RelationshipResponse {
 	if relationship == nil {
 		return nil
@@ -43,7 +51,7 @@ func ToRelationshipResponse(relationship *model.UserRelationship) *RelationshipR
 
 	return &RelationshipResponse{
 		TargetUser: UserBrief{
-			ID:        relationship.FollowingID,
+			UID:       relationship.FollowingUID,
 			Nickname:  relationship.Following.Nickname,
 			AvatarURL: relationship.Following.AvatarURL,
 		},
@@ -53,9 +61,39 @@ func ToRelationshipResponse(relationship *model.UserRelationship) *RelationshipR
 	}
 }
 
-// FriendResponse 好友响应
-type FriendResponse struct {
-	UserBrief
-	CommonFriends     int        `json:"common_friends"`
-	LastInteractionAt *time.Time `json:"last_interaction_at,omitempty"`
+func ToFriendResponse(user *model.User, commonFriends int, lastInteractionAt *time.Time) *FriendResponse {
+	if user == nil {
+		return nil
+	}
+
+	return &FriendResponse{
+		UserBrief: UserBrief{
+			UID:       user.UID,
+			Nickname:  user.Nickname,
+			AvatarURL: user.AvatarURL,
+		},
+		CommonFriends:     commonFriends,
+		LastInteractionAt: lastInteractionAt,
+	}
+}
+
+// 分页响应转换函数
+func ToRelationshipListResponse(relationships []*model.UserRelationship, total int64, page, size int) *RelationshipListResponse {
+	list := make([]*RelationshipResponse, len(relationships))
+	for i, rel := range relationships {
+		list[i] = ToRelationshipResponse(rel)
+	}
+	return NewPaginatedResponse(list, total, page, size)
+}
+
+func ToFriendListResponse(users []*model.User, commonFriends map[string]int, lastInteractions map[string]*time.Time, total int64, page, size int) *FriendListResponse {
+	list := make([]*FriendResponse, len(users))
+	for i, user := range users {
+		list[i] = ToFriendResponse(
+			user,
+			commonFriends[user.UID],
+			lastInteractions[user.UID],
+		)
+	}
+	return NewPaginatedResponse(list, total, page, size)
 }

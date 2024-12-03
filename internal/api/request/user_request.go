@@ -15,7 +15,7 @@ type UpdateProfileRequest struct {
 	Bio                 string `json:"bio" binding:"omitempty,max=500"`
 	Gender              string `json:"gender" binding:"omitempty,oneof=male female other"`
 	BirthDate           string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
-	Language            string `json:"language" binding:"omitempty,len=5"`
+	Language            string `json:"language" binding:"omitempty,len=5"` // 如: zh_CN
 	PrivacyLevel        string `json:"privacy_level" binding:"omitempty,oneof=public friends private"`
 	LocationSharing     *bool  `json:"location_sharing,omitempty"`
 	PhotoEnabled        *bool  `json:"photo_enabled,omitempty"`
@@ -43,11 +43,29 @@ type NearbyUsersRequest struct {
 
 // UserDeviceRequest 用户设备注册请求
 type UserDeviceRequest struct {
-	DeviceToken string `json:"device_token" binding:"required"`
-	DeviceType  string `json:"device_type" binding:"required,oneof=ios android web"`
-	DeviceName  string `json:"device_name" binding:"required,max=100"`
-	DeviceModel string `json:"device_model" binding:"max=50"`
-	OSVersion   string `json:"os_version" binding:"max=20"`
-	AppVersion  string `json:"app_version" binding:"required,max=20"`
-	PushEnabled *bool  `json:"push_enabled,omitempty"`
+	DeviceToken  string `json:"device_token" binding:"required"`
+	DeviceType   string `json:"device_type" binding:"required,oneof=ios android web"`
+	DeviceName   string `json:"device_name" binding:"required,max=100"`
+	DeviceModel  string `json:"device_model" binding:"max=50"`
+	OSVersion    string `json:"os_version" binding:"max=20"`
+	AppVersion   string `json:"app_version" binding:"required,max=20"`
+	BrowserInfo  string `json:"browser_info" binding:"omitempty,max=200"`
+	PushProvider string `json:"push_provider" binding:"required,oneof=fcm apns web"`
+	PushEnabled  *bool  `json:"push_enabled,omitempty"`
+}
+
+// GetUserRequest 获取用户信息请求
+type GetUserRequest struct {
+	UIDParam
+	IncludeDeleted bool `form:"include_deleted" json:"include_deleted"` // 是否包含已删除的用户
+}
+
+// GetUserByFirebaseRequest 根据Firebase UID获取用户请求
+type GetUserByFirebaseRequest struct {
+	FirebaseUID string `json:"firebase_uid" binding:"required"`
+}
+
+// BatchGetUsersRequest 批量获取用户信息请求
+type BatchGetUsersRequest struct {
+	UIDs []string `json:"uids" binding:"required,min=1,max=100,dive,uuid"` // 最多100个用户
 }

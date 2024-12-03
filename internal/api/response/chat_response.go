@@ -8,9 +8,9 @@ import (
 
 // ChatRoomResponse 聊天室响应
 type ChatRoomResponse struct {
-	ID           uint64        `json:"id"`
+	UID          string        `json:"uid"`
 	Name         string        `json:"name"`
-	Type         string        `json:"type"` // individual/group
+	Type         string        `json:"type"` // individual/group/merchant/official
 	AvatarURL    string        `json:"avatar_url"`
 	Announcement string        `json:"announcement"`
 	MembersCount int           `json:"members_count"`
@@ -31,8 +31,8 @@ type ChatMemberResponse struct {
 
 // MessageResponse 消息响应
 type MessageResponse struct {
-	ID          uint64         `json:"id"`
-	ChatRoomID  uint64         `json:"chat_room_id"`
+	UID         string         `json:"uid"`
+	ChatRoomUID string         `json:"chat_room_uid"`
 	Sender      UserBrief      `json:"sender"`
 	ContentType string         `json:"content_type"` // text/image/file/system
 	Content     string         `json:"content"`
@@ -49,7 +49,7 @@ type MessageBrief struct {
 
 // MessageMedia 消息媒体信息
 type MessageMedia struct {
-	ID   uint64 `json:"id"`
+	UID  string `json:"uid"`
 	Type string `json:"type"` // image/file
 	URL  string `json:"url"`
 	Name string `json:"name,omitempty"`
@@ -61,14 +61,15 @@ type ChatRoomListResponse = PaginatedResponse[*ChatRoomResponse]
 type MessageListResponse = PaginatedResponse[*MessageResponse]
 type ChatMemberListResponse = PaginatedResponse[*ChatMemberResponse]
 
-// 转换方法
+// Convert Functions
+
 func ToChatRoomResponse(room *model.ChatRoom) *ChatRoomResponse {
 	if room == nil {
 		return nil
 	}
 
 	resp := &ChatRoomResponse{
-		ID:           room.ID,
+		UID:          room.UID,
 		Name:         room.Name,
 		Type:         room.Type,
 		AvatarURL:    room.AvatarURL,
@@ -85,8 +86,8 @@ func ToMessageResponse(msg *model.Message) *MessageResponse {
 	}
 
 	resp := &MessageResponse{
-		ID:          msg.ID,
-		ChatRoomID:  msg.ChatRoomID,
+		UID:         msg.UID,
+		ChatRoomUID: msg.ChatRoomUID,
 		Sender:      *ToUserBrief(&msg.Sender),
 		ContentType: msg.ContentType,
 		Content:     msg.Content,
@@ -108,4 +109,29 @@ func ToChatMemberResponse(member *model.ChatRoomMember) *ChatMemberResponse {
 		JoinedAt:  member.CreatedAt,
 		IsMuted:   member.IsMuted,
 	}
+}
+
+// 分页响应转换函数
+func ToChatRoomListResponse(rooms []*model.ChatRoom, total int64, page, size int) *ChatRoomListResponse {
+	list := make([]*ChatRoomResponse, len(rooms))
+	for i, room := range rooms {
+		list[i] = ToChatRoomResponse(room)
+	}
+	return NewPaginatedResponse(list, total, page, size)
+}
+
+func ToMessageListResponse(messages []*model.Message, total int64, page, size int) *MessageListResponse {
+	list := make([]*MessageResponse, len(messages))
+	for i, msg := range messages {
+		list[i] = ToMessageResponse(msg)
+	}
+	return NewPaginatedResponse(list, total, page, size)
+}
+
+func ToChatMemberListResponse(members []*model.ChatRoomMember, total int64, page, size int) *ChatMemberListResponse {
+	list := make([]*ChatMemberResponse, len(members))
+	for i, member := range members {
+		list[i] = ToChatMemberResponse(member)
+	}
+	return NewPaginatedResponse(list, total, page, size)
 }

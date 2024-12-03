@@ -81,3 +81,8 @@ func (q *DateRangeQuery) GetDateRange() (time.Time, time.Time, error) {
 
 	return startDate, endDate, nil
 }
+
+// UIDParam UUID参数
+type UIDParam struct {
+	UID string `uri:"uid" binding:"required,uuid" json:"uid"` // UUID参数
+}

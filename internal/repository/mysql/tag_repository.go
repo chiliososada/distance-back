@@ -17,17 +17,20 @@ func NewTagRepository(db *gorm.DB) repository.TagRepository {
 	return &tagRepository{db: db}
 }
 
+// Create 创建标签
 func (r *tagRepository) Create(ctx context.Context, tag *model.Tag) error {
 	return r.db.WithContext(ctx).Create(tag).Error
 }
 
+// Update 更新标签
 func (r *tagRepository) Update(ctx context.Context, tag *model.Tag) error {
 	return r.db.WithContext(ctx).Save(tag).Error
 }
 
-func (r *tagRepository) GetByID(ctx context.Context, id uint64) (*model.Tag, error) {
+// GetByUID 根据UID获取标签
+func (r *tagRepository) GetByUID(ctx context.Context, uid string) (*model.Tag, error) {
 	var tag model.Tag
-	err := r.db.WithContext(ctx).First(&tag, id).Error
+	err := r.db.WithContext(ctx).Where("uid = ?", uid).First(&tag).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -37,6 +40,7 @@ func (r *tagRepository) GetByID(ctx context.Context, id uint64) (*model.Tag, err
 	return &tag, nil
 }
 
+// GetByName 根据名称获取标签
 func (r *tagRepository) GetByName(ctx context.Context, name string) (*model.Tag, error) {
 	var tag model.Tag
 	err := r.db.WithContext(ctx).Where("name = ?", name).First(&tag).Error
@@ -49,6 +53,7 @@ func (r *tagRepository) GetByName(ctx context.Context, name string) (*model.Tag,
 	return &tag, nil
 }
 
+// List 获取标签列表
 func (r *tagRepository) List(ctx context.Context, offset, limit int) ([]*model.Tag, int64, error) {
 	var tags []*model.Tag
 	var total int64
@@ -69,6 +74,7 @@ func (r *tagRepository) List(ctx context.Context, offset, limit int) ([]*model.T
 	return tags, total, nil
 }
 
+// ListPopular 获取热门标签列表
 func (r *tagRepository) ListPopular(ctx context.Context, limit int) ([]*model.Tag, error) {
 	var tags []*model.Tag
 	err := r.db.WithContext(ctx).
@@ -78,28 +84,32 @@ func (r *tagRepository) ListPopular(ctx context.Context, limit int) ([]*model.Ta
 	return tags, err
 }
 
-func (r *tagRepository) IncrementUseCount(ctx context.Context, id uint64) error {
+// IncrementUseCount 增加标签使用次数
+func (r *tagRepository) IncrementUseCount(ctx context.Context, uid string) error {
 	return r.db.WithContext(ctx).
 		Model(&model.Tag{}).
-		Where("id = ?", id).
+		Where("uid = ?", uid).
 		UpdateColumn("use_count", gorm.Expr("use_count + ?", 1)).
 		Error
 }
 
-func (r *tagRepository) DecrementUseCount(ctx context.Context, id uint64) error {
+// DecrementUseCount 减少标签使用次数
+func (r *tagRepository) DecrementUseCount(ctx context.Context, uid string) error {
 	return r.db.WithContext(ctx).
 		Model(&model.Tag{}).
-		Where("id = ?", id).
+		Where("uid = ?", uid).
 		UpdateColumn("use_count", gorm.Expr("use_count - ?", 1)).
 		Error
 }
 
-func (r *tagRepository) Delete(ctx context.Context, id uint64) error {
-	return r.db.WithContext(ctx).Delete(&model.Tag{}, id).Error
+// Delete 删除标签
+func (r *tagRepository) Delete(ctx context.Context, uid string) error {
+	return r.db.WithContext(ctx).Where("uid = ?", uid).Delete(&model.Tag{}).Error
 }
 
-func (r *tagRepository) BatchCreate(ctx context.Context, tags []string) ([]uint64, error) {
-	var tagIds []uint64
+// BatchCreate 批量创建标签
+func (r *tagRepository) BatchCreate(ctx context.Context, tags []string) ([]string, error) {
+	var tagUIDs []string
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, tagName := range tags {
 			var tag model.Tag
@@ -114,9 +124,9 @@ func (r *tagRepository) BatchCreate(ctx context.Context, tags []string) ([]uint6
 			} else if err != nil {
 				return err
 			}
-			tagIds = append(tagIds, tag.ID)
+			tagUIDs = append(tagUIDs, tag.UID)
 		}
 		return nil
 	})
-	return tagIds, err
+	return tagUIDs, err
 }

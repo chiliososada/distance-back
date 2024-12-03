@@ -8,7 +8,7 @@ import (
 
 // UserBrief 用户简要信息
 type UserBrief struct {
-	ID        uint64 `json:"id"`
+	UID       string `json:"uid"`
 	Nickname  string `json:"nickname"`
 	AvatarURL string `json:"avatar_url"`
 }
@@ -16,15 +16,18 @@ type UserBrief struct {
 // UserInfo 用户基础信息
 type UserInfo struct {
 	UserBrief
-	Bio              string     `json:"bio"`
-	Gender           string     `json:"gender"`
-	BirthDate        *time.Time `json:"birth_date,omitempty"`
-	Location         *Location  `json:"location,omitempty"`
-	PrivacyLevel     string     `json:"privacy_level"`
-	IsLocationShared bool       `json:"is_location_shared"`
-	IsPhotoEnabled   bool       `json:"is_photo_enabled"`
-	LastActiveAt     *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
+	Bio                 string     `json:"bio"`
+	Gender              string     `json:"gender"`
+	BirthDate           *time.Time `json:"birth_date,omitempty"`
+	Location            *Location  `json:"location,omitempty"`
+	Language            string     `json:"language"`
+	PrivacyLevel        string     `json:"privacy_level"`
+	NotificationEnabled bool       `json:"notification_enabled"`
+	LocationSharing     bool       `json:"location_shared"`
+	PhotoEnabled        bool       `json:"photo_enabled"`
+	LastActiveAt        *time.Time `json:"last_active_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UserType            string     `json:"user_type"`
 }
 
 // UserProfile 用户完整资料
@@ -50,18 +53,24 @@ type Relationship struct {
 	IsBlocked   bool `json:"is_blocked"`
 }
 
-// Location 位置信息
-type Location struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Distance  float64 `json:"distance,omitempty"`
-}
-
 // 使用泛型定义分页响应类型
 type UserListResponse = PaginatedResponse[*UserInfo]
 type UserBriefListResponse = PaginatedResponse[*UserBrief]
 
-// ToUserInfo 转换为用户信息
+// Convert Functions
+
+func ToUserBrief(user *model.User) *UserBrief {
+	if user == nil {
+		return nil
+	}
+
+	return &UserBrief{
+		UID:       user.UID,
+		Nickname:  user.Nickname,
+		AvatarURL: user.AvatarURL,
+	}
+}
+
 func ToUserInfo(user *model.User) *UserInfo {
 	if user == nil {
 		return nil
@@ -69,17 +78,20 @@ func ToUserInfo(user *model.User) *UserInfo {
 
 	info := &UserInfo{
 		UserBrief: UserBrief{
-			ID:        user.ID,
+			UID:       user.UID,
 			Nickname:  user.Nickname,
 			AvatarURL: user.AvatarURL,
 		},
-		Bio:              user.Bio,
-		Gender:           user.Gender,
-		PrivacyLevel:     user.PrivacyLevel,
-		IsLocationShared: user.LocationSharing,
-		IsPhotoEnabled:   user.PhotoEnabled,
-		LastActiveAt:     user.LastActiveAt,
-		CreatedAt:        user.CreatedAt,
+		Bio:                 user.Bio,
+		Gender:              user.Gender,
+		Language:            user.Language,
+		PrivacyLevel:        user.PrivacyLevel,
+		NotificationEnabled: user.NotificationEnabled,
+		LocationSharing:     user.LocationSharing,
+		PhotoEnabled:        user.PhotoEnabled,
+		LastActiveAt:        user.LastActiveAt,
+		CreatedAt:           user.CreatedAt,
+		UserType:            user.UserType,
 	}
 
 	if user.BirthDate != nil {
@@ -96,7 +108,6 @@ func ToUserInfo(user *model.User) *UserInfo {
 	return info
 }
 
-// ToUserProfile 转换为用户完整资料
 func ToUserProfile(user *model.User) *UserProfile {
 	if user == nil {
 		return nil
@@ -110,18 +121,5 @@ func ToUserProfile(user *model.User) *UserProfile {
 			FollowingCount: user.FollowingCount,
 			FriendsCount:   user.FriendsCount,
 		},
-	}
-}
-
-// ToUserBrief 转换为用户简要信息
-func ToUserBrief(user *model.User) *UserBrief {
-	if user == nil {
-		return nil
-	}
-
-	return &UserBrief{
-		ID:        user.ID,
-		Nickname:  user.Nickname,
-		AvatarURL: user.AvatarURL,
 	}
 }
