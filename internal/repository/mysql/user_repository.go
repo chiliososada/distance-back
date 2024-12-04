@@ -7,7 +7,7 @@ import (
 
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
-
+	"github.com/chiliososada/distance-back/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -37,13 +37,26 @@ func (r *userRepository) Delete(ctx context.Context, uid string) error {
 
 // GetByUID 根据UID获取用户
 func (r *userRepository) GetByUID(ctx context.Context, uid string) (*model.User, error) {
+	logger.Info("Getting user by UID", logger.String("uid", uid))
+
 	var user model.User
-	if err := r.db.WithContext(ctx).Where("uid = ?", uid).First(&user).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	result := r.db.WithContext(ctx).
+		// Debug(). // 添加这行来看SQL日志
+		Where("uid = ?", uid).
+		First(&user)
+
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			logger.Info("User not found", logger.String("uid", uid))
 			return nil, nil
 		}
-		return nil, err
+		logger.Error("Failed to get user",
+			logger.String("uid", uid),
+			logger.Any("error", result.Error))
+		return nil, result.Error
 	}
+
+	logger.Info("Found user", logger.Any("user", user))
 	return &user, nil
 }
 
@@ -186,4 +199,28 @@ func (r *userRepository) GetUserDevices(ctx context.Context, userUID string) ([]
 		return nil, err
 	}
 	return devices, nil
+}
+func (r *userRepository) CreateWithAuth(ctx context.Context, user *model.User, auth *model.UserAuthentication) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		auth.UserUID = user.UID
+		if err := tx.Create(auth).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func (r *userRepository) UpdateWithAuth(ctx context.Context, user *model.User, auth *model.UserAuthentication) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(user).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_uid = ?", user.UID).Updates(auth).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }

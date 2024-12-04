@@ -24,7 +24,7 @@ type UpdateProfileRequest struct {
 
 // UpdateLocationRequest 更新位置请求
 type UpdateLocationRequest struct {
-	LocationQuery
+	LocationPerson
 	LocationSharing bool `json:"location_sharing"`
 }
 

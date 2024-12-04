@@ -20,6 +20,8 @@ type UserRepository interface {
 	GetByFirebaseUID(ctx context.Context, firebaseUID string) (*model.User, error)
 	CreateAuthentication(ctx context.Context, auth *model.UserAuthentication) error
 	UpdateAuthentication(ctx context.Context, auth *model.UserAuthentication) error
+	CreateWithAuth(ctx context.Context, user *model.User, auth *model.UserAuthentication) error
+	UpdateWithAuth(ctx context.Context, user *model.User, auth *model.UserAuthentication) error
 
 	// 设备相关
 	CreateDevice(ctx context.Context, device *model.UserDevice) error
