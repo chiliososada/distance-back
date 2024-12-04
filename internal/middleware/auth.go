@@ -12,9 +12,11 @@ import (
 
 // AuthRequired 认证中间件
 func AuthRequired() gin.HandlerFunc {
+	print(123)
 	return func(c *gin.Context) {
 		// 获取 Authorization header
 		authHeader := c.GetHeader("Authorization")
+
 		if authHeader == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    401,
@@ -48,7 +50,6 @@ func AuthRequired() gin.HandlerFunc {
 		// 将用户信息存储在上下文中
 		c.Set("firebase_user", firebaseToken)
 		c.Set("user_id", firebaseToken.UID)
-
 		c.Next()
 	}
 }

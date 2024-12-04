@@ -1,4 +1,3 @@
-// Topic request structures
 package request
 
 import (
@@ -26,21 +25,17 @@ type UpdateTopicRequest struct {
 
 // TopicListRequest 话题列表请求
 type TopicListRequest struct {
-	Page      int    `form:"page" binding:"required,min=1"`
-	PageSize  int    `form:"page_size" binding:"required,min=1,max=100"`
-	TagID     uint64 `form:"tag_id" binding:"omitempty,min=1"`
-	UserID    uint64 `form:"user_id" binding:"omitempty,min=1"`
+	PaginationQuery
+	TagUID    string `form:"tag_uid" binding:"omitempty,uuid"`
+	UserUID   string `form:"user_uid" binding:"omitempty,uuid"`
 	SortBy    string `form:"sort_by" binding:"omitempty,oneof=created_at likes_count views_count"`
 	SortOrder string `form:"sort_order" binding:"omitempty,oneof=asc desc"`
 }
 
 // NearbyTopicsRequest 附近话题请求
 type NearbyTopicsRequest struct {
-	Page      int     `form:"page" binding:"required,min=1"`
-	PageSize  int     `form:"page_size" binding:"required,min=1,max=100"`
-	Latitude  float64 `form:"latitude" binding:"required,min=-90,max=90"`
-	Longitude float64 `form:"longitude" binding:"required,min=-180,max=180"`
-	Radius    float64 `form:"radius" binding:"required,min=0,max=50000"`
+	PaginationQuery
+	LocationQuery
 }
 
 // TopicImageRequest 话题图片请求
@@ -60,10 +55,28 @@ type AddTagsRequest struct {
 
 // RemoveTagsRequest 移除标签请求
 type RemoveTagsRequest struct {
-	TagIDs []uint64 `json:"tag_ids" binding:"required,min=1,dive,min=1"`
+	TagUIDs []string `json:"tag_uids" binding:"required,min=1,dive,uuid"`
 }
 
 // GetPopularTagsRequest 获取热门标签请求
 type GetPopularTagsRequest struct {
 	Limit int `form:"limit" binding:"required,min=1,max=100"`
+}
+
+// GetTopicRequest 获取话题请求
+type GetTopicRequest struct {
+	UIDParam
+	IncludeDeleted bool `form:"include_deleted" json:"include_deleted"`
+}
+
+// GetTopicInteractionsRequest 获取话题互动列表请求
+type GetTopicInteractionsRequest struct {
+	PaginationQuery
+	TopicUID        string `form:"topic_uid" binding:"required,uuid"`
+	InteractionType string `form:"interaction_type" binding:"required,oneof=like favorite share"`
+}
+
+// BatchGetTopicsRequest 批量获取话题请求
+type BatchGetTopicsRequest struct {
+	TopicUIDs []string `json:"topic_uids" binding:"required,min=1,max=100,dive,uuid"`
 }

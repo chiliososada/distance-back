@@ -21,13 +21,7 @@ func NewChatRepository(db *gorm.DB) repository.ChatRepository {
 
 // CreateRoom 创建聊天室
 func (r *chatRepository) CreateRoom(ctx context.Context, room *model.ChatRoom) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 创建聊天室
-		if err := tx.Create(room).Error; err != nil {
-			return err
-		}
-		return nil
-	})
+	return r.db.WithContext(ctx).Create(room).Error
 }
 
 // UpdateRoom 更新聊天室信息
@@ -35,11 +29,12 @@ func (r *chatRepository) UpdateRoom(ctx context.Context, room *model.ChatRoom) e
 	return r.db.WithContext(ctx).Save(room).Error
 }
 
-// GetRoomByID 获取聊天室信息
-func (r *chatRepository) GetRoomByID(ctx context.Context, id uint64) (*model.ChatRoom, error) {
+// GetRoomByUID 获取聊天室信息
+func (r *chatRepository) GetRoomByUID(ctx context.Context, uid string) (*model.ChatRoom, error) {
 	var room model.ChatRoom
 	err := r.db.WithContext(ctx).
-		First(&room, id).Error
+		Where("uid = ?", uid).
+		First(&room).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
@@ -50,16 +45,16 @@ func (r *chatRepository) GetRoomByID(ctx context.Context, id uint64) (*model.Cha
 }
 
 // ListUserRooms 获取用户的聊天室列表
-func (r *chatRepository) ListUserRooms(ctx context.Context, userID uint64, offset, limit int) ([]*model.ChatRoom, int64, error) {
+func (r *chatRepository) ListUserRooms(ctx context.Context, userUID string, offset, limit int) ([]*model.ChatRoom, int64, error) {
 	var rooms []*model.ChatRoom
 	var total int64
 
 	subQuery := r.db.Model(&model.ChatRoomMember{}).
-		Select("chat_room_id").
-		Where("user_id = ?", userID)
+		Select("chat_room_uid").
+		Where("user_uid = ?", userUID)
 
 	db := r.db.WithContext(ctx).
-		Where("id IN (?)", subQuery)
+		Where("uid IN (?)", subQuery)
 
 	// 获取总数
 	if err := db.Model(&model.ChatRoom{}).Count(&total).Error; err != nil {
@@ -89,7 +84,7 @@ func (r *chatRepository) AddMember(ctx context.Context, member *model.ChatRoomMe
 		// 检查是否已经是成员
 		var count int64
 		if err := tx.Model(&model.ChatRoomMember{}).
-			Where("chat_room_id = ? AND user_id = ?", member.ChatRoomID, member.UserID).
+			Where("chat_room_uid = ? AND user_uid = ?", member.ChatRoomUID, member.UserUID).
 			Count(&count).Error; err != nil {
 			return err
 		}
@@ -98,25 +93,15 @@ func (r *chatRepository) AddMember(ctx context.Context, member *model.ChatRoomMe
 		}
 
 		// 添加成员
-		if err := tx.Create(member).Error; err != nil {
-			return err
-		}
-
-		return nil
+		return tx.Create(member).Error
 	})
 }
 
 // RemoveMember 移除聊天室成员
-func (r *chatRepository) RemoveMember(ctx context.Context, roomID, userID uint64) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 移除成员
-		if err := tx.Where("chat_room_id = ? AND user_id = ?", roomID, userID).
-			Delete(&model.ChatRoomMember{}).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
+func (r *chatRepository) RemoveMember(ctx context.Context, roomUID, userUID string) error {
+	return r.db.WithContext(ctx).
+		Where("chat_room_uid = ? AND user_uid = ?", roomUID, userUID).
+		Delete(&model.ChatRoomMember{}).Error
 }
 
 // UpdateMember 更新成员信息
@@ -125,10 +110,10 @@ func (r *chatRepository) UpdateMember(ctx context.Context, member *model.ChatRoo
 }
 
 // GetRoomMembers 获取聊天室成员列表
-func (r *chatRepository) GetRoomMembers(ctx context.Context, roomID uint64) ([]*model.ChatRoomMember, error) {
+func (r *chatRepository) GetRoomMembers(ctx context.Context, roomUID string) ([]*model.ChatRoomMember, error) {
 	var members []*model.ChatRoomMember
 	err := r.db.WithContext(ctx).
-		Where("chat_room_id = ?", roomID).
+		Where("chat_room_uid = ?", roomUID).
 		Preload("User").
 		Order("role DESC, joined_at ASC").
 		Find(&members).Error
@@ -148,7 +133,7 @@ func (r *chatRepository) CreateMessage(ctx context.Context, message *model.Messa
 
 		// 更新聊天室最后更新时间
 		if err := tx.Model(&model.ChatRoom{}).
-			Where("id = ?", message.ChatRoomID).
+			Where("uid = ?", message.ChatRoomUID).
 			UpdateColumn("updated_at", time.Now()).Error; err != nil {
 			return err
 		}
@@ -158,17 +143,21 @@ func (r *chatRepository) CreateMessage(ctx context.Context, message *model.Messa
 }
 
 // GetMessagesByRoom 获取聊天室消息列表（向前加载）
-func (r *chatRepository) GetMessagesByRoom(ctx context.Context, roomID uint64, beforeID uint64, limit int) ([]*model.Message, error) {
+func (r *chatRepository) GetMessagesByRoom(ctx context.Context, roomUID string, beforeUID string, limit int) ([]*model.Message, error) {
 	var messages []*model.Message
 	query := r.db.WithContext(ctx).
-		Where("chat_room_id = ?", roomID).
+		Where("chat_room_uid = ?", roomUID).
 		Preload("Sender").
 		Preload("MessageMedia").
-		Order("id DESC").
+		Order("created_at DESC").
 		Limit(limit)
 
-	if beforeID > 0 {
-		query = query.Where("id < ?", beforeID)
+	if beforeUID != "" {
+		var beforeMsg model.Message
+		if err := r.db.WithContext(ctx).Where("uid = ?", beforeUID).First(&beforeMsg).Error; err != nil {
+			return nil, err
+		}
+		query = query.Where("created_at < ?", beforeMsg.CreatedAt)
 	}
 
 	if err := query.Find(&messages).Error; err != nil {
@@ -184,13 +173,13 @@ func (r *chatRepository) GetMessagesByRoom(ctx context.Context, roomID uint64, b
 }
 
 // GetLatestMessages 获取聊天室最新消息
-func (r *chatRepository) GetLatestMessages(ctx context.Context, roomID uint64, limit int) ([]*model.Message, error) {
+func (r *chatRepository) GetLatestMessages(ctx context.Context, roomUID string, limit int) ([]*model.Message, error) {
 	var messages []*model.Message
 	err := r.db.WithContext(ctx).
-		Where("chat_room_id = ?", roomID).
+		Where("chat_room_uid = ?", roomUID).
 		Preload("Sender").
 		Preload("MessageMedia").
-		Order("id DESC").
+		Order("created_at DESC").
 		Limit(limit).
 		Find(&messages).Error
 	if err != nil {
@@ -211,10 +200,10 @@ func (r *chatRepository) AddMessageMedia(ctx context.Context, media *model.Messa
 }
 
 // GetMessageMedia 获取消息媒体列表
-func (r *chatRepository) GetMessageMedia(ctx context.Context, messageID uint64) ([]*model.MessageMedia, error) {
+func (r *chatRepository) GetMessageMedia(ctx context.Context, messageUID string) ([]*model.MessageMedia, error) {
 	var media []*model.MessageMedia
 	err := r.db.WithContext(ctx).
-		Where("message_id = ?", messageID).
+		Where("message_uid = ?", messageUID).
 		Find(&media).Error
 	if err != nil {
 		return nil, err
@@ -223,28 +212,28 @@ func (r *chatRepository) GetMessageMedia(ctx context.Context, messageID uint64) 
 }
 
 // PinRoom 置顶聊天室
-func (r *chatRepository) PinRoom(ctx context.Context, userID, roomID uint64) error {
+func (r *chatRepository) PinRoom(ctx context.Context, userUID, roomUID string) error {
 	pinned := &model.PinnedChatRoom{
-		UserID:     userID,
-		ChatRoomID: roomID,
-		PinnedAt:   time.Now(),
+		UserUID:     userUID,
+		ChatRoomUID: roomUID,
+		PinnedAt:    time.Now(),
 	}
 	return r.db.WithContext(ctx).Create(pinned).Error
 }
 
 // UnpinRoom 取消置顶聊天室
-func (r *chatRepository) UnpinRoom(ctx context.Context, userID, roomID uint64) error {
+func (r *chatRepository) UnpinRoom(ctx context.Context, userUID, roomUID string) error {
 	return r.db.WithContext(ctx).
-		Where("user_id = ? AND chat_room_id = ?", userID, roomID).
+		Where("user_uid = ? AND chat_room_uid = ?", userUID, roomUID).
 		Delete(&model.PinnedChatRoom{}).Error
 }
 
 // GetPinnedRooms 获取用户置顶的聊天室列表
-func (r *chatRepository) GetPinnedRooms(ctx context.Context, userID uint64) ([]*model.ChatRoom, error) {
+func (r *chatRepository) GetPinnedRooms(ctx context.Context, userUID string) ([]*model.ChatRoom, error) {
 	var rooms []*model.ChatRoom
 	err := r.db.WithContext(ctx).
-		Joins("JOIN pinned_chat_rooms ON pinned_chat_rooms.chat_room_id = chat_rooms.id").
-		Where("pinned_chat_rooms.user_id = ?", userID).
+		Joins("JOIN pinned_chat_rooms ON pinned_chat_rooms.chat_room_uid = chat_rooms.uid").
+		Where("pinned_chat_rooms.user_uid = ?", userUID).
 		Preload("ChatRoomMembers", func(db *gorm.DB) *gorm.DB {
 			return db.Order("joined_at DESC")
 		}).

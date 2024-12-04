@@ -31,14 +31,14 @@ func (r *userRepository) Update(ctx context.Context, user *model.User) error {
 }
 
 // Delete 删除用户
-func (r *userRepository) Delete(ctx context.Context, id uint64) error {
-	return r.db.WithContext(ctx).Delete(&model.User{}, id).Error
+func (r *userRepository) Delete(ctx context.Context, uid string) error {
+	return r.db.WithContext(ctx).Delete(&model.User{}, "uid = ?", uid).Error
 }
 
-// GetByID 根据ID获取用户
-func (r *userRepository) GetByID(ctx context.Context, id uint64) (*model.User, error) {
+// GetByUID 根据UID获取用户
+func (r *userRepository) GetByUID(ctx context.Context, uid string) (*model.User, error) {
 	var user model.User
-	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("uid = ?", uid).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
@@ -58,7 +58,7 @@ func (r *userRepository) GetByFirebaseUID(ctx context.Context, firebaseUID strin
 	}
 
 	var user model.User
-	if err := r.db.WithContext(ctx).First(&user, auth.UserID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("uid = ?", auth.UserUID).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -130,19 +130,19 @@ func (r *userRepository) GetNearbyUsers(ctx context.Context, lat, lng float64, r
 }
 
 // UpdateStatus 更新用户状态
-func (r *userRepository) UpdateStatus(ctx context.Context, userID uint64, status string) error {
+func (r *userRepository) UpdateStatus(ctx context.Context, userUID string, status string) error {
 	return r.db.WithContext(ctx).
 		Model(&model.User{}).
-		Where("id = ?", userID).
+		Where("uid = ?", userUID).
 		Update("status", status).
 		Error
 }
 
 // UpdateLastActive 更新用户最后活跃时间
-func (r *userRepository) UpdateLastActive(ctx context.Context, userID uint64) error {
+func (r *userRepository) UpdateLastActive(ctx context.Context, userUID string) error {
 	return r.db.WithContext(ctx).
 		Model(&model.User{}).
-		Where("id = ?", userID).
+		Where("uid = ?", userUID).
 		Update("last_active_at", time.Now()).
 		Error
 }
@@ -180,9 +180,9 @@ func (r *userRepository) GetDeviceByToken(ctx context.Context, token string) (*m
 }
 
 // GetUserDevices 获取用户的所有设备
-func (r *userRepository) GetUserDevices(ctx context.Context, userID uint64) ([]*model.UserDevice, error) {
+func (r *userRepository) GetUserDevices(ctx context.Context, userUID string) ([]*model.UserDevice, error) {
 	var devices []*model.UserDevice
-	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Find(&devices).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("user_uid = ?", userUID).Find(&devices).Error; err != nil {
 		return nil, err
 	}
 	return devices, nil

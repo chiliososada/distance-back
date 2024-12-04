@@ -56,7 +56,7 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 
 		// 创建认证信息
 		auth := &model.UserAuthentication{
-			UserID:       user.ID,
+			UserUID:      user.UID,
 			FirebaseUID:  firebaseUser.UID,
 			Email:        utils.NewNullString(firebaseUser.Email),
 			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
@@ -82,7 +82,7 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 
 		// 更新认证信息
 		auth := &model.UserAuthentication{
-			UserID:       user.ID,
+			UserUID:      user.UID,
 			FirebaseUID:  firebaseUser.UID,
 			Email:        utils.NewNullString(firebaseUser.Email),
 			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
@@ -96,7 +96,7 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 	}
 
 	// 缓存用户信息
-	cacheKey := cache.UserKey(user.ID)
+	cacheKey := cache.UserKey(user.UID)
 	if err := cache.Set(cacheKey, user, cache.DefaultExpiration); err != nil {
 		logger.Warn("failed to cache user info", logger.Any("error", err))
 	}
@@ -105,9 +105,9 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 }
 
 // UpdateProfile 更新用户资料
-func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, profile *model.User) error {
+func (s *UserService) UpdateProfile(ctx context.Context, userUID string, profile *model.User) error {
 	// 获取现有用户信息
-	user, err := s.GetUserByID(ctx, userID)
+	user, err := s.GetUserByUID(ctx, userUID)
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, profile 
 	}
 
 	// 清除缓存
-	cacheKey := cache.UserKey(userID)
+	cacheKey := cache.UserKey(userUID)
 	if err := cache.Delete(cacheKey); err != nil {
 		logger.Warn("failed to delete user cache", logger.Any("error", err))
 	}
@@ -141,9 +141,9 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, profile 
 }
 
 // UpdateAvatar 更新用户头像
-func (s *UserService) UpdateAvatar(ctx context.Context, userID uint64, avatar *model.File) error {
+func (s *UserService) UpdateAvatar(ctx context.Context, userUID string, avatar *model.File) error {
 	// 获取现有用户信息
-	user, err := s.GetUserByID(ctx, userID)
+	user, err := s.GetUserByUID(ctx, userUID)
 	if err != nil {
 		return err
 	}
@@ -164,7 +164,7 @@ func (s *UserService) UpdateAvatar(ctx context.Context, userID uint64, avatar *m
 	}
 
 	// 清除缓存
-	cacheKey := cache.UserKey(userID)
+	cacheKey := cache.UserKey(userUID)
 	if err := cache.Delete(cacheKey); err != nil {
 		logger.Warn("failed to delete user cache", logger.Any("error", err))
 	}
@@ -173,9 +173,9 @@ func (s *UserService) UpdateAvatar(ctx context.Context, userID uint64, avatar *m
 }
 
 // UpdateLocation 更新用户位置
-func (s *UserService) UpdateLocation(ctx context.Context, userID uint64, lat, lng float64) error {
+func (s *UserService) UpdateLocation(ctx context.Context, userUID string, lat, lng float64) error {
 	// 获取现有用户信息
-	user, err := s.GetUserByID(ctx, userID)
+	user, err := s.GetUserByUID(ctx, userUID)
 	if err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (s *UserService) UpdateLocation(ctx context.Context, userID uint64, lat, ln
 	}
 
 	// 更新位置缓存
-	locationKey := cache.LocationKey(userID)
+	locationKey := cache.LocationKey(userUID)
 	location := &utils.Location{
 		Latitude:  lat,
 		Longitude: lng,
@@ -203,10 +203,26 @@ func (s *UserService) UpdateLocation(ctx context.Context, userID uint64, lat, ln
 	return nil
 }
 
-// GetUserByID 获取用户信息
-func (s *UserService) GetUserByID(ctx context.Context, userID uint64) (*model.User, error) {
+// 在 UserService 中添加这个方法
+func (s *UserService) GetByFirebaseUID(ctx context.Context, firebaseUID string) (*model.User, error) {
+	// 通过 Firebase UID 查找用户
+	user, err := s.userRepo.GetByFirebaseUID(ctx, firebaseUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by firebase uid: %w", err)
+	}
+
+	// 用户不存在时返回 nil
+	if user == nil {
+		return nil, nil
+	}
+
+	return user, nil
+}
+
+// GetUserByUID 获取用户信息
+func (s *UserService) GetUserByUID(ctx context.Context, userUID string) (*model.User, error) {
 	// 尝试从缓存获取
-	cacheKey := cache.UserKey(userID)
+	cacheKey := cache.UserKey(userUID)
 	var cachedUser model.User
 	err := cache.Get(cacheKey, &cachedUser)
 	if err == nil {
@@ -214,7 +230,7 @@ func (s *UserService) GetUserByID(ctx context.Context, userID uint64) (*model.Us
 	}
 
 	// 从数据库获取
-	user, err := s.userRepo.GetByID(ctx, userID)
+	user, err := s.userRepo.GetByUID(ctx, userUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -243,7 +259,7 @@ func (s *UserService) GetNearbyUsers(ctx context.Context, lat, lng float64, radi
 }
 
 // RegisterDevice 注册用户设备
-func (s *UserService) RegisterDevice(ctx context.Context, userID uint64, device *model.UserDevice) error {
+func (s *UserService) RegisterDevice(ctx context.Context, userUID string, device *model.UserDevice) error {
 	// 检查设备是否已存在
 	existingDevice, err := s.userRepo.GetDeviceByToken(ctx, device.DeviceToken)
 	if err != nil {
@@ -252,7 +268,7 @@ func (s *UserService) RegisterDevice(ctx context.Context, userID uint64, device 
 
 	if existingDevice != nil {
 		// 更新现有设备
-		existingDevice.UserID = userID
+		existingDevice.UserUID = userUID
 		existingDevice.DeviceName = device.DeviceName
 		existingDevice.DeviceModel = device.DeviceModel
 		existingDevice.OSVersion = device.OSVersion
@@ -266,7 +282,7 @@ func (s *UserService) RegisterDevice(ctx context.Context, userID uint64, device 
 		}
 	} else {
 		// 创建新设备
-		device.UserID = userID
+		device.UserUID = userUID
 		device.LastActiveAt = time.Now()
 		device.IsActive = true
 
@@ -279,6 +295,46 @@ func (s *UserService) RegisterDevice(ctx context.Context, userID uint64, device 
 }
 
 // UpdateLastActive 更新用户最后活跃时间
-func (s *UserService) UpdateLastActive(ctx context.Context, userID uint64) error {
-	return s.userRepo.UpdateLastActive(ctx, userID)
+func (s *UserService) UpdateLastActive(ctx context.Context, userUID string) error {
+	return s.userRepo.UpdateLastActive(ctx, userUID)
+}
+
+// VerifyDevice 验证设备信息
+func (s *UserService) VerifyDevice(ctx context.Context, userUID string, deviceToken string) (bool, error) {
+	// 获取设备信息
+	device, err := s.userRepo.GetDeviceByToken(ctx, deviceToken)
+	if err != nil {
+		return false, fmt.Errorf("failed to get device: %w", err)
+	}
+
+	// 如果设备不存在则返回false
+	if device == nil {
+		return false, nil
+	}
+
+	// 验证设备是否属于该用户且处于活跃状态
+	return device.UserUID == userUID && device.IsActive, nil
+}
+
+// ListUsers 获取用户列表（管理员接口）
+func (s *UserService) ListUsers(ctx context.Context, page, size int) ([]*model.User, int64, error) {
+	offset := (page - 1) * size
+
+	// 从数据库获取用户列表
+	users, total, err := s.userRepo.List(ctx, offset, size)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+
+	// 批量更新缓存
+	for _, user := range users {
+		cacheKey := cache.UserKey(user.UID)
+		if err := cache.Set(cacheKey, user, cache.DefaultExpiration); err != nil {
+			logger.Warn("failed to cache user info",
+				logger.String("user_uid", user.UID),
+				logger.Any("error", err))
+		}
+	}
+
+	return users, total, nil
 }

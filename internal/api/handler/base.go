@@ -73,24 +73,41 @@ func Error(c *gin.Context, err error) {
 	})
 }
 
-// GetCurrentUserID 获取当前用户ID
-func (h *Handler) GetCurrentUserID(c *gin.Context) uint64 {
-	userID, exists := c.Get("user_id")
+// GetCurrentUserUID 获取当前用户UID
+func (h *Handler) GetCurrentUserUID(c *gin.Context) string {
+	firebaseUID, exists := c.Get("user_uid")
 	if !exists {
-		return 0
+		return ""
 	}
-	return userID.(uint64)
+
+	if firebaseUIDStr, ok := firebaseUID.(string); ok {
+		// 通过 Firebase UID 查询用户
+		user, err := h.userService.GetByFirebaseUID(c.Request.Context(), firebaseUIDStr)
+		if err != nil {
+			logger.Error("Failed to get user by firebase uid",
+				logger.String("firebase_uid", firebaseUIDStr),
+				logger.Any("error", err))
+			return ""
+		}
+		if user == nil {
+			return ""
+		}
+		return user.UID
+	}
+
+	return ""
 }
 
-// ParseUint64Param 解析uint64类型的路径参数
-func ParseUint64Param(c *gin.Context, param string) (uint64, error) {
-	val := c.Param(param)
-	id, err := strconv.ParseUint(val, 10, 64)
-	if err != nil {
-		return 0, errors.New(errors.CodeValidation, "Invalid parameter").
-			WithDeveloper(err.Error())
+// ParseUUID 解析UUID类型的路径参数
+func ParseUUID(c *gin.Context, param string) (string, error) {
+	uid := c.Param(param)
+	if uid == "" {
+		return "", errors.New(errors.CodeValidation, "Invalid UUID parameter").
+			WithDetails(map[string]string{
+				"param": param,
+			})
 	}
-	return id, nil
+	return uid, nil
 }
 
 // ParseDateRange 解析日期范围
@@ -102,7 +119,6 @@ func ParseDateRange(startDate, endDate string) (time.Time, time.Time, error) {
 		start, err = time.Parse("2006-01-02", startDate)
 		if err != nil {
 			return time.Time{}, time.Time{}, errors.New(errors.CodeValidation, "Invalid start date format").
-				WithDeveloper(err.Error()).
 				WithDetails(map[string]string{
 					"start_date": startDate,
 					"format":     "2006-01-02",
@@ -116,7 +132,6 @@ func ParseDateRange(startDate, endDate string) (time.Time, time.Time, error) {
 		end, err = time.Parse("2006-01-02", endDate)
 		if err != nil {
 			return time.Time{}, time.Time{}, errors.New(errors.CodeValidation, "Invalid end date format").
-				WithDeveloper(err.Error()).
 				WithDetails(map[string]string{
 					"end_date": endDate,
 					"format":   "2006-01-02",
@@ -147,7 +162,6 @@ func GetPagination(c *gin.Context) (page, size int, err error) {
 	page, err = strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
 		return 0, 0, errors.New(errors.CodeValidation, "Invalid page parameter").
-			WithDeveloper(err.Error()).
 			WithDetails(map[string]interface{}{
 				"page": pageStr,
 				"min":  1,
@@ -158,7 +172,6 @@ func GetPagination(c *gin.Context) (page, size int, err error) {
 	size, err = strconv.Atoi(sizeStr)
 	if err != nil || size < 1 || size > 100 {
 		return 0, 0, errors.New(errors.CodeValidation, "Invalid size parameter").
-			WithDeveloper(err.Error()).
 			WithDetails(map[string]interface{}{
 				"size":        sizeStr,
 				"valid_range": "1 to 100",
@@ -216,7 +229,6 @@ func GetTraceID(c *gin.Context) string {
 func BindAndValidate(c *gin.Context, obj interface{}) error {
 	if err := c.ShouldBind(obj); err != nil {
 		return errors.New(errors.CodeValidation, "Invalid request parameters").
-			WithDeveloper(err.Error()).
 			WithDetails(map[string]interface{}{
 				"error": err.Error(),
 			})
@@ -228,7 +240,6 @@ func BindAndValidate(c *gin.Context, obj interface{}) error {
 func BindQuery(c *gin.Context, obj interface{}) error {
 	if err := c.ShouldBindQuery(obj); err != nil {
 		return errors.New(errors.CodeValidation, "Invalid query parameters").
-			WithDeveloper(err.Error()).
 			WithDetails(map[string]interface{}{
 				"error": err.Error(),
 			})

@@ -8,13 +8,13 @@ import (
 
 // TopicResponse 话题响应基础结构
 type TopicResponse struct {
-	ID                uint64      `json:"id"`
+	UID               string      `json:"uid"`
 	Title             string      `json:"title"`
 	Content           string      `json:"content"`
-	User              *UserBrief  `json:"user"` // 使用已有的 UserBrief
+	User              *UserBrief  `json:"user"`
 	Images            []ImageInfo `json:"images,omitempty"`
 	Tags              []TagInfo   `json:"tags,omitempty"`
-	Location          *Location   `json:"location"` // 使用已有的 Location
+	Location          *Location   `json:"location"`
 	Distance          float64     `json:"distance,omitempty"`
 	LikesCount        uint        `json:"likes_count"`
 	ViewsCount        uint        `json:"views_count"`
@@ -28,7 +28,7 @@ type TopicResponse struct {
 
 // ImageInfo 图片信息
 type ImageInfo struct {
-	ID        uint64    `json:"id"`
+	UID       string    `json:"uid"`
 	URL       string    `json:"url"`
 	Width     uint      `json:"width"`
 	Height    uint      `json:"height"`
@@ -39,7 +39,7 @@ type ImageInfo struct {
 
 // TagInfo 标签信息
 type TagInfo struct {
-	ID       uint64 `json:"id"`
+	UID      string `json:"uid"`
 	Name     string `json:"name"`
 	UseCount uint   `json:"use_count"`
 }
@@ -59,8 +59,8 @@ type InteractionInfo struct {
 
 // TopicInteractionResponse 话题互动响应
 type TopicInteractionResponse struct {
-	ID              uint64     `json:"id"`
-	TopicID         uint64     `json:"topic_id"`
+	UID             string     `json:"uid"`
+	TopicUID        string     `json:"topic_uid"`
 	User            *UserBrief `json:"user"`
 	InteractionType string     `json:"interaction_type"`
 	Status          string     `json:"status"`
@@ -80,7 +80,7 @@ func ToTopicResponse(topic *model.Topic) *TopicResponse {
 	}
 
 	resp := &TopicResponse{
-		ID:                topic.ID,
+		UID:               topic.UID,
 		Title:             topic.Title,
 		Content:           topic.Content,
 		LikesCount:        topic.LikesCount,
@@ -98,7 +98,7 @@ func ToTopicResponse(topic *model.Topic) *TopicResponse {
 	}
 
 	// Convert user info
-	if topic.User.ID != 0 {
+	if topic.User.UID != "" {
 		resp.User = ToUserBrief(&topic.User)
 	}
 
@@ -107,13 +107,25 @@ func ToTopicResponse(topic *model.Topic) *TopicResponse {
 		resp.Images = make([]ImageInfo, len(topic.TopicImages))
 		for i, img := range topic.TopicImages {
 			resp.Images[i] = ImageInfo{
-				ID:        img.ID,
+				UID:       img.UID,
 				URL:       img.ImageURL,
 				Width:     img.ImageWidth,
 				Height:    img.ImageHeight,
 				Size:      img.FileSize,
 				SortOrder: img.SortOrder,
 				CreatedAt: img.CreatedAt,
+			}
+		}
+	}
+
+	// Convert tags
+	if len(topic.TopicTags) > 0 {
+		resp.Tags = make([]TagInfo, len(topic.TopicTags))
+		for i, tag := range topic.TopicTags {
+			resp.Tags[i] = TagInfo{
+				UID:      tag.Tag.UID,
+				Name:     tag.Tag.Name,
+				UseCount: tag.Tag.UseCount,
 			}
 		}
 	}
@@ -151,14 +163,32 @@ func ToTopicInteractionResponse(interaction *model.TopicInteraction) *TopicInter
 	}
 
 	return &TopicInteractionResponse{
-		ID:              interaction.ID,
-		TopicID:         interaction.TopicID,
+		UID:             interaction.UID,
+		TopicUID:        interaction.TopicUID,
 		User:            ToUserBrief(&interaction.User),
 		InteractionType: interaction.InteractionType,
 		Status:          interaction.InteractionStatus,
 		CreatedAt:       interaction.CreatedAt,
 	}
 }
+
+func ToTagInfoList(tags []*model.Tag) []*TagInfo {
+	if tags == nil {
+		return nil
+	}
+
+	list := make([]*TagInfo, len(tags))
+	for i, tag := range tags {
+		list[i] = &TagInfo{
+			UID:      tag.UID,
+			Name:     tag.Name,
+			UseCount: tag.UseCount,
+		}
+	}
+	return list
+}
+
+// 添加这些分页响应的转换函数:
 
 func ToTopicListResponse(topics []*model.Topic, total int64, page, size int) *TopicListResponse {
 	list := make([]*TopicResponse, len(topics))
@@ -176,23 +206,14 @@ func ToInteractionListResponse(interactions []*model.TopicInteraction, total int
 	return NewPaginatedResponse(list, total, page, size)
 }
 
-func ToTagInfoList(tags []*model.Tag) []*TagInfo {
-	if tags == nil {
-		return nil
-	}
-
+func ToTagListResponse(tags []*model.Tag, total int64, page, size int) *TagListResponse {
 	list := make([]*TagInfo, len(tags))
 	for i, tag := range tags {
 		list[i] = &TagInfo{
-			ID:       tag.ID,
+			UID:      tag.UID,
 			Name:     tag.Name,
 			UseCount: tag.UseCount,
 		}
 	}
-	return list
-}
-
-func ToTagListResponse(tags []*model.Tag, total int64, page, size int) *TagListResponse {
-	tagInfos := ToTagInfoList(tags)
-	return NewPaginatedResponse(tagInfos, total, page, size)
+	return NewPaginatedResponse(list, total, page, size)
 }

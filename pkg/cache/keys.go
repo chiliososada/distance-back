@@ -34,55 +34,55 @@ const (
 	// 标签相关前缀
 	TagKeyPrefix    = "tag:"
 	TopicTagsPrefix = "topic:tags:"
-	PopularTagsName = "popular:tags" // 改名以避免与函数冲突
+	PopularTagsName = "popular:tags"
 )
 
 // 用户相关键生成函数
-func UserKey(userID uint64) string {
-	return fmt.Sprintf("%s%d", UserKeyPrefix, userID)
+func UserKey(uid string) string {
+	return fmt.Sprintf("%s%s", UserKeyPrefix, uid)
 }
 
-func UserTokenKey(userID uint64) string {
-	return fmt.Sprintf("%s%d", UserTokenPrefix, userID)
+func UserTokenKey(uid string) string {
+	return fmt.Sprintf("%s%s", UserTokenPrefix, uid)
 }
 
-func UserProfileKey(userID uint64) string {
-	return fmt.Sprintf("%s%d", UserProfilePrefix, userID)
+func UserProfileKey(uid string) string {
+	return fmt.Sprintf("%s%s", UserProfilePrefix, uid)
 }
 
-func UserOnlineKey(userID uint64) string {
-	return fmt.Sprintf("%s%d", UserOnlinePrefix, userID)
+func UserOnlineKey(uid string) string {
+	return fmt.Sprintf("%s%s", UserOnlinePrefix, uid)
 }
 
 // 话题相关键生成函数
-func TopicKey(topicID uint64) string {
-	return fmt.Sprintf("%s%d", TopicKeyPrefix, topicID)
+func TopicKey(uid string) string {
+	return fmt.Sprintf("%s%s", TopicKeyPrefix, uid)
 }
 
-func TopicLikeKey(topicID uint64) string {
-	return fmt.Sprintf("%s%d", TopicLikePrefix, topicID)
+func TopicLikeKey(uid string) string {
+	return fmt.Sprintf("%s%s", TopicLikePrefix, uid)
 }
 
-func TopicViewKey(topicID uint64) string {
-	return fmt.Sprintf("%s%d", TopicViewPrefix, topicID)
+func TopicViewKey(uid string) string {
+	return fmt.Sprintf("%s%s", TopicViewPrefix, uid)
 }
 
 // 聊天相关键生成函数
-func ChatRoomKey(roomID uint64) string {
-	return fmt.Sprintf("%s%d", ChatRoomPrefix, roomID)
+func ChatRoomKey(uid string) string {
+	return fmt.Sprintf("%s%s", ChatRoomPrefix, uid)
 }
 
-func ChatMembersKey(roomID uint64) string {
-	return fmt.Sprintf("%s%d", ChatMembersPrefix, roomID)
+func ChatMembersKey(uid string) string {
+	return fmt.Sprintf("%s%s", ChatMembersPrefix, uid)
 }
 
-func ChatMessagesKey(roomID uint64) string {
-	return fmt.Sprintf("%s%d", ChatMessagesPrefix, roomID)
+func ChatMessagesKey(uid string) string {
+	return fmt.Sprintf("%s%s", ChatMessagesPrefix, uid)
 }
 
 // 位置相关键生成函数
-func LocationKey(userID uint64) string {
-	return fmt.Sprintf("%s%d", LocationKeyPrefix, userID)
+func LocationKey(uid string) string {
+	return fmt.Sprintf("%s%s", LocationKeyPrefix, uid)
 }
 
 func NearbyKey(latitude, longitude float64) string {
@@ -90,12 +90,12 @@ func NearbyKey(latitude, longitude float64) string {
 }
 
 // 标签相关键生成函数
-func TagKey(tagID uint64) string {
-	return fmt.Sprintf("%s%d", TagKeyPrefix, tagID)
+func TagKey(uid string) string {
+	return fmt.Sprintf("%s%s", TagKeyPrefix, uid)
 }
 
-func TopicTagsKey(topicID uint64) string {
-	return fmt.Sprintf("%s%d", TopicTagsPrefix, topicID)
+func TopicTagsKey(uid string) string {
+	return fmt.Sprintf("%s%s", TopicTagsPrefix, uid)
 }
 
 func PopularTagsKey() string {
@@ -103,12 +103,12 @@ func PopularTagsKey() string {
 }
 
 // 缓存删除函数
-func RemoveUserCache(userID uint64) error {
+func RemoveUserCache(uid string) error {
 	keys := []string{
-		UserKey(userID),
-		UserTokenKey(userID),
-		UserProfileKey(userID),
-		UserOnlineKey(userID),
+		UserKey(uid),
+		UserTokenKey(uid),
+		UserProfileKey(uid),
+		UserOnlineKey(uid),
 	}
 
 	for _, key := range keys {
@@ -119,11 +119,11 @@ func RemoveUserCache(userID uint64) error {
 	return nil
 }
 
-func RemoveTopicCache(topicID uint64) error {
+func RemoveTopicCache(uid string) error {
 	keys := []string{
-		TopicKey(topicID),
-		TopicLikeKey(topicID),
-		TopicViewKey(topicID),
+		TopicKey(uid),
+		TopicLikeKey(uid),
+		TopicViewKey(uid),
 	}
 
 	for _, key := range keys {
@@ -134,11 +134,11 @@ func RemoveTopicCache(topicID uint64) error {
 	return nil
 }
 
-func RemoveChatRoomCache(roomID uint64) error {
+func RemoveChatRoomCache(uid string) error {
 	keys := []string{
-		ChatRoomKey(roomID),
-		ChatMembersKey(roomID),
-		ChatMessagesKey(roomID),
+		ChatRoomKey(uid),
+		ChatMembersKey(uid),
+		ChatMessagesKey(uid),
 	}
 
 	for _, key := range keys {
@@ -149,6 +149,6 @@ func RemoveChatRoomCache(roomID uint64) error {
 	return nil
 }
 
-func RemoveLocationCache(userID uint64) error {
-	return Delete(LocationKey(userID))
+func RemoveLocationCache(uid string) error {
+	return Delete(LocationKey(uid))
 }
