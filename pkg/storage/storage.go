@@ -63,6 +63,7 @@ func GetStorage() Storage {
 }
 
 // UploadFile 上传文件
+// UploadFile 上传文件
 func (s *FirebaseStorage) UploadFile(ctx context.Context, file *multipart.FileHeader, directory string) (string, error) {
 	// 打开文件
 	src, err := file.Open()
@@ -84,12 +85,6 @@ func (s *FirebaseStorage) UploadFile(ctx context.Context, file *multipart.FileHe
 	// 创建对象句柄
 	obj := s.bucket.Object(objectPath)
 
-	// 设置文件访问权限为公开
-	objectACL := obj.ACL()
-	if err := objectACL.Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
-		return "", fmt.Errorf("failed to set file ACL: %v", err)
-	}
-
 	// 创建写入器
 	writer := obj.NewWriter(ctx)
 
@@ -108,6 +103,12 @@ func (s *FirebaseStorage) UploadFile(ctx context.Context, file *multipart.FileHe
 	// 关闭写入器
 	if err := writer.Close(); err != nil {
 		return "", fmt.Errorf("failed to close writer: %v", err)
+	}
+
+	// 文件上传完成后再设置访问权限
+	objectACL := obj.ACL()
+	if err := objectACL.Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
+		return "", fmt.Errorf("failed to set file ACL: %v", err)
 	}
 
 	// 返回文件访问URL
