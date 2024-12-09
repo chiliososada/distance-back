@@ -175,6 +175,7 @@ CREATE TABLE topic_images (
     image_height INT UNSIGNED COMMENT '图片高度',
     file_size INT UNSIGNED COMMENT '文件大小(字节)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_uid (uid),
     FOREIGN KEY (topic_uid) REFERENCES topics(uid),
     INDEX idx_topic_sort (topic_uid, sort_order)
@@ -197,6 +198,7 @@ CREATE TABLE topic_tags (
     topic_uid VARCHAR(36) NOT NULL COMMENT '话题UUID',
     tag_uid VARCHAR(36) NOT NULL COMMENT '标签UUID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (topic_uid, tag_uid),
     FOREIGN KEY (topic_uid) REFERENCES topics(uid),
     FOREIGN KEY (tag_uid) REFERENCES tags(uid),

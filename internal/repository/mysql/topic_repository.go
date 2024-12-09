@@ -3,9 +3,12 @@ package mysql
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
+	"github.com/chiliososada/distance-back/pkg/logger"
+	"github.com/google/uuid"
 
 	"gorm.io/gorm"
 )
@@ -215,20 +218,50 @@ func (r *topicRepository) GetImages(ctx context.Context, topicUID string) ([]*mo
 
 // AddTags 添加话题标签
 func (r *topicRepository) AddTags(ctx context.Context, topicUID string, tagUIDs []string) error {
+	logger.Info("Starting AddTags",
+		logger.String("topic_uid", topicUID),
+		logger.Any("tag_uids", tagUIDs))
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, tagUID := range tagUIDs {
-			topicTag := &model.TopicTag{
-				TopicUID: topicUID,
-				TagUID:   tagUID,
-			}
-			if err := tx.Create(topicTag).Error; err != nil {
+			// 首先验证标签是否存在
+			var tag model.Tag
+			if err := tx.Where("uid = ?", tagUID).First(&tag).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					logger.Error("Tag not found in database",
+						logger.String("tag_uid", tagUID))
+					return fmt.Errorf("tag not found: %s", tagUID)
+				}
 				return err
 			}
+
+			// 创建话题标签关联
+			topicTag := model.TopicTag{
+				TopicUID:  topicUID,
+				TagUID:    tag.UID,
+				CreatedAt: time.Now(),
+			}
+
+			if err := tx.Create(&topicTag).Error; err != nil {
+				logger.Error("Failed to create topic tag",
+					logger.String("topic_uid", topicUID),
+					logger.String("tag_uid", tag.UID),
+					logger.Any("error", err))
+				return err
+			}
+
 			// 增加标签使用次数
-			if err := tx.Model(&model.Tag{}).Where("uid = ?", tagUID).
+			if err := tx.Model(&model.Tag{}).Where("uid = ?", tag.UID).
 				UpdateColumn("use_count", gorm.Expr("use_count + ?", 1)).Error; err != nil {
+				logger.Error("Failed to update tag use count",
+					logger.String("tag_uid", tag.UID),
+					logger.Any("error", err))
 				return err
 			}
+
+			logger.Info("Successfully added tag and updated use count",
+				logger.String("topic_uid", topicUID),
+				logger.String("tag_uid", tag.UID))
 		}
 		return nil
 	})
@@ -276,6 +309,9 @@ func (r *topicRepository) BatchCreate(ctx context.Context, tags []string) ([]str
 			if err == gorm.ErrRecordNotFound {
 				// 如果标签不存在，创建新标签
 				tag = model.Tag{
+					BaseModel: model.BaseModel{
+						UID: uuid.New().String(), // 确保生成 UUID
+					},
 					Name:     tagName,
 					UseCount: 1,
 				}

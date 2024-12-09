@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
+	"time"
+
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/model"
@@ -38,7 +41,25 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 		Error(c, errors.ErrValidation.WithDetails(err.Error()))
 		return
 	}
-
+	// 手动解析 tags 字段
+	if tagsStr := c.PostForm("Tags"); tagsStr != "" {
+		var tags []string
+		if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
+			logger.Error("Failed to parse tags JSON",
+				logger.Any("error", err),
+				logger.String("tags_str", tagsStr))
+		} else {
+			req.Tags = tags
+		}
+	}
+	// 手动验证 ExpiresAt
+	if !req.ExpiresAt.After(time.Now()) {
+		logger.Error("ExpiresAt is not in the future",
+			logger.Time("expires_at", req.ExpiresAt),
+			logger.Time("current_time", time.Now()))
+		Error(c, errors.ErrValidation.WithDetails("ExpiresAt must be in the future"))
+		return
+	}
 	// 处理图片
 	var images []*model.File
 	form, err := c.MultipartForm()
@@ -68,21 +89,28 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 	// 创建话题
 	createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, topic, images)
 	if err != nil {
-		logger.Error("创建话题失败",
+		logger.Error("创建话题参数验证失败",
 			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
-			logger.String("user_uid", userUID))
+			logger.Time("expires_at", req.ExpiresAt),
+		)
 		Error(c, errors.ErrOperation.WithDetails(err.Error()))
 		return
 	}
-
+	// 打印请求数据
+	logger.Info("Received create topic request",
+		logger.Any("request", req))
 	// 处理标签
 	if len(req.Tags) > 0 {
-		if err := h.topicService.AddTags(c.Request.Context(), createdTopic.UID, req.Tags); err != nil {
-			logger.Error("添加话题标签失败",
-				logger.String("path", c.Request.URL.Path),
+		logger.Info("Adding tags to topic",
+			logger.Any("tags", req.Tags),
+			logger.String("topic_uid", topic.UID))
+
+		if err := h.topicService.AddTags(c.Request.Context(), topic.UID, req.Tags); err != nil {
+			logger.Error("failed to add tags",
 				logger.Any("error", err),
-				logger.String("topic_uid", createdTopic.UID))
+				logger.String("topic_uid", topic.UID),
+				logger.Any("tags", req.Tags))
 		}
 	}
 
