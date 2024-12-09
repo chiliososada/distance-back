@@ -14,51 +14,106 @@ import (
 )
 
 // RegisterUser 处理用户注册
-// @Summary 用户注册
-// @Description 注册新用户或更新已有用户信息
+// @Summary 用户注册或更新
+// @Description 注册新用户或更新已有用户信息（Firebase认证后）
 // @Tags 用户管理
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Firebase ID Token"
 // @Param request body request.RegisterRequest true "注册信息"
 // @Success 200 {object} response.Response{data=response.UserInfo}
-// @Failure 400,401 {object} response.Response
+// @Failure 400,401,500 {object} response.Response
 // @Router /api/v1/auth/register [post]
 func (h *Handler) RegisterUser(c *gin.Context) {
-	// 验证 Firebase token
+	// 1. 验证 Firebase token
 	token := c.GetHeader("Authorization")
 	if token == "" {
 		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 解码 Firebase token
+	// 2. 解析 token
 	decodedToken, err := auth.VerifyIDToken(c.Request.Context(), strings.TrimPrefix(token, "Bearer "))
 	if err != nil {
-		logger.Error("Firebase token验证失败", logger.Any("error", err))
+		logger.Error("Failed to verify Firebase token",
+			logger.Any("error", err))
 		Error(c, errors.ErrTokenInvalid)
 		return
 	}
 
-	// 绑定请求参数
+	// 3. 绑定并验证请求参数
 	var req request.RegisterRequest
 	if err := BindAndValidate(c, &req); err != nil {
 		Error(c, err)
 		return
 	}
 
-	// 创建或更新用户
+	// 4. 创建认证用户对象
 	authUser := auth.NewAuthUserFromToken(decodedToken)
+
+	// 5. 补充用户信息
+	if authUser.DisplayName == "" {
+		authUser.DisplayName = req.Nickname
+	}
+
+	// 6. 注册或更新用户
 	user, err := h.userService.RegisterOrUpdateUser(c.Request.Context(), authUser)
 	if err != nil {
-		logger.Error("用户注册失败",
-			logger.Any("error", err),
-			logger.Any("auth_user", authUser))
+		logger.Error("Failed to register/update user",
+			logger.Any("auth_user", authUser),
+			logger.Any("error", err))
 		Error(c, errors.ErrAuthentication)
 		return
 	}
+	// 解析出生日期
+	birthDate, err := time.Parse("2006-01-02", req.BirthDate)
+	if err != nil {
+		Error(c, errors.New(errors.CodeValidation, "Invalid birth date format"))
+		return
+	}
 
-	Success(c, response.ToUserInfo(user))
+	// 更新用户的其他信息
+	profileUpdate := &model.User{
+		Nickname:  req.Nickname,
+		Gender:    req.Gender,
+		BirthDate: &birthDate,
+		Language:  req.Language,
+	}
+
+	if err := h.userService.UpdateProfile(c.Request.Context(), user.UID, profileUpdate); err != nil {
+		Error(c, err)
+		return
+	}
+	// 7. 注册设备
+	device := &model.UserDevice{
+		UserUID:      user.UID,
+		DeviceToken:  req.DeviceInfo.DeviceToken,
+		DeviceType:   req.DeviceInfo.DeviceType,
+		DeviceName:   req.DeviceInfo.DeviceName,
+		DeviceModel:  req.DeviceInfo.DeviceModel,
+		OSVersion:    req.DeviceInfo.OSVersion,
+		AppVersion:   req.DeviceInfo.AppVersion,
+		PushProvider: req.DeviceInfo.PushProvider,
+		PushEnabled:  true,
+		IsActive:     true,
+		LastActiveAt: time.Now(),
+	}
+
+	if err := h.userService.RegisterDevice(c.Request.Context(), user.UID, device); err != nil {
+		logger.Warn("Failed to register device",
+			logger.String("user_uid", user.UID),
+			logger.Any("error", err))
+		// 不返回错误，因为设备注册失败不应影响用户注册
+	}
+	// 获取最新的用户信息
+	updatedUser, err := h.userService.GetUserByUID(c.Request.Context(), user.UID)
+	if err != nil {
+		Error(c, err)
+		return
+	}
+
+	// 8. 返回用户信息
+	Success(c, response.ToUserInfo(updatedUser))
 }
 
 // GetProfile 获取个人资料
@@ -255,15 +310,9 @@ func (h *Handler) UpdateLocation(c *gin.Context) {
 		return
 	}
 
-	if err := h.userService.UpdateLocation(c.Request.Context(), userUID, req.Latitude, req.Longitude); err != nil {
-		Error(c, errors.ErrInvalidLocation)
-		return
-	}
-
-	// 获取更新后的用户信息
-	updatedUser, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
+	updatedUser, err := h.userService.UpdateLocation(c.Request.Context(), userUID, req.Latitude, req.Longitude)
 	if err != nil {
-		Error(c, errors.ErrUserNotFound)
+		Error(c, err)
 		return
 	}
 
