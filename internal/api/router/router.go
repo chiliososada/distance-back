@@ -60,7 +60,6 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 		// 用户相关路由
 		users := authenticated.Group("/users")
 		{
-			print("1")
 			users.GET("/profile", h.GetProfile)      // 获取个人资料
 			users.PUT("/profile", h.UpdateProfile)   // 更新个人资料
 			users.PUT("/avatar", h.UpdateAvatar)     // 更新头像

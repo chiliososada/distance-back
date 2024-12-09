@@ -102,54 +102,79 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
+	logger.Info("Updating profile for user", logger.String("uid", userUID))
+
 	var req request.UpdateProfileRequest
 	if err := BindAndValidate(c, &req); err != nil {
 		Error(c, err)
 		return
 	}
 
-	// 构建用户资料模型
-	profile := &model.User{
-		Nickname:     req.Nickname,
-		Bio:          req.Bio,
-		Gender:       req.Gender,
-		Language:     req.Language,
-		PrivacyLevel: req.PrivacyLevel,
-		Status:       "active",
-		UserType:     "individual",
+	// 获取现有用户
+	currentUser, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
+	if err != nil {
+		logger.Error("Failed to get user",
+			logger.String("uid", userUID),
+			logger.Any("error", err))
+		Error(c, err)
+		return
 	}
-
-	// 处理可选的布尔值字段
-	if req.LocationSharing != nil {
-		profile.LocationSharing = *req.LocationSharing
-	}
-	if req.PhotoEnabled != nil {
-		profile.PhotoEnabled = *req.PhotoEnabled
-	}
-	if req.NotificationEnabled != nil {
-		profile.NotificationEnabled = *req.NotificationEnabled
-	}
-
-	// 处理生日日期
-	if req.BirthDate != "" {
-		birthDate, err := time.Parse("2006-01-02", req.BirthDate)
-		if err != nil {
-			Error(c, errors.ErrInvalidBirthDate)
-			return
-		}
-		profile.BirthDate = &birthDate
-	}
-
-	// 更新用户资料
-	if err := h.userService.UpdateProfile(c.Request.Context(), userUID, profile); err != nil {
-		Error(c, errors.ErrUserProfileUpdateFailed.WithDetails(err.Error()))
+	if currentUser == nil {
+		Error(c, errors.ErrUserNotFound)
 		return
 	}
 
-	// 获取更新后的用户信息
+	logger.Info("Found existing user", logger.Any("user", currentUser))
+
+	// 只更新请求中的字段
+	if req.Nickname != "" {
+		currentUser.Nickname = req.Nickname
+	}
+	if req.Bio != "" {
+		currentUser.Bio = req.Bio
+	}
+	if req.Gender != "" {
+		currentUser.Gender = req.Gender
+	}
+	if req.Language != "" {
+		currentUser.Language = req.Language
+	}
+	if req.PrivacyLevel != "" {
+		currentUser.PrivacyLevel = req.PrivacyLevel
+	}
+	if req.LocationSharing != nil {
+		currentUser.LocationSharing = *req.LocationSharing
+	}
+	if req.PhotoEnabled != nil {
+		currentUser.PhotoEnabled = *req.PhotoEnabled
+	}
+	if req.NotificationEnabled != nil {
+		currentUser.NotificationEnabled = *req.NotificationEnabled
+	}
+	if req.BirthDate != "" {
+		birthDate, err := time.Parse("2006-01-02", req.BirthDate)
+		if err != nil {
+			Error(c, errors.New(errors.CodeValidation, "Invalid birth date format"))
+			return
+		}
+		currentUser.BirthDate = &birthDate
+	}
+
+	logger.Info("Updating user with data", logger.Any("updated_user", currentUser))
+
+	// 更新用户信息
+	if err := h.userService.UpdateProfile(c.Request.Context(), userUID, currentUser); err != nil {
+		logger.Error("Failed to update user",
+			logger.String("uid", userUID),
+			logger.Any("error", err))
+		Error(c, err)
+		return
+	}
+
+	// 获取更新后的信息
 	updatedUser, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
 	if err != nil {
-		Error(c, errors.ErrUserNotFound)
+		Error(c, err)
 		return
 	}
 
@@ -255,7 +280,7 @@ func (h *Handler) UpdateLocation(c *gin.Context) {
 // @Failure 400,404 {object} response.Response
 // @Router /api/v1/users/{uid} [get]
 func (h *Handler) GetUserProfile(c *gin.Context) {
-	targetUID, err := ParseUUID(c, "uid")
+	targetUID, err := ParseUUID(c, "id")
 	if err != nil {
 		Error(c, err)
 		return

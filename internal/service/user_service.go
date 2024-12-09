@@ -13,6 +13,8 @@ import (
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/chiliososada/distance-back/pkg/storage"
 	"github.com/chiliososada/distance-back/pkg/utils"
+
+	"github.com/google/uuid"
 )
 
 type UserService struct {
@@ -39,9 +41,12 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 	if user == nil {
 		// 创建新用户
 		user = &model.User{
+			BaseModel: model.BaseModel{
+				UID: uuid.NewString(), // 添加 uuid 导入
+			},
 			Nickname:            firebaseUser.DisplayName,
 			AvatarURL:           firebaseUser.PhotoURL,
-			Gender:              "other", // 设置默认性别
+			Gender:              "other",
 			Status:              model.UserStatusActive,
 			PrivacyLevel:        model.PrivacyPublic,
 			NotificationEnabled: true,
@@ -50,22 +55,22 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 			UserType:            "individual",
 		}
 
-		if err := s.userRepo.Create(ctx, user); err != nil {
-			return nil, fmt.Errorf("failed to create user: %w", err)
-		}
-
-		// 创建认证信息
+		// 准备认证信息
 		auth := &model.UserAuthentication{
+			BaseModel: model.BaseModel{
+				UID: uuid.NewString(),
+			},
 			UserUID:      user.UID,
 			FirebaseUID:  firebaseUser.UID,
 			Email:        utils.NewNullString(firebaseUser.Email),
 			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
 			LastSignInAt: utils.TimePtr(time.Now()),
-			AuthProvider: "password", // 添加认证方式
+			AuthProvider: "password",
 		}
 
-		if err := s.userRepo.CreateAuthentication(ctx, auth); err != nil {
-			return nil, fmt.Errorf("failed to create user authentication: %w", err)
+		// 使用事务创建用户和认证信息
+		if err := s.userRepo.CreateWithAuth(ctx, user, auth); err != nil {
+			return nil, fmt.Errorf("failed to create user and authentication: %w", err)
 		}
 	} else {
 		// 更新现有用户信息
@@ -76,11 +81,7 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 			user.AvatarURL = firebaseUser.PhotoURL
 		}
 
-		if err := s.userRepo.Update(ctx, user); err != nil {
-			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-
-		// 更新认证信息
+		// 准备认证信息更新
 		auth := &model.UserAuthentication{
 			UserUID:      user.UID,
 			FirebaseUID:  firebaseUser.UID,
@@ -90,8 +91,9 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *au
 			AuthProvider: "password",
 		}
 
-		if err := s.userRepo.UpdateAuthentication(ctx, auth); err != nil {
-			return nil, fmt.Errorf("failed to update user authentication: %w", err)
+		// 使用事务更新用户和认证信息
+		if err := s.userRepo.UpdateWithAuth(ctx, user, auth); err != nil {
+			return nil, fmt.Errorf("failed to update user and authentication: %w", err)
 		}
 	}
 
@@ -220,27 +222,38 @@ func (s *UserService) GetByFirebaseUID(ctx context.Context, firebaseUID string) 
 }
 
 // GetUserByUID 获取用户信息
+// 在 service/user_service.go 中
 func (s *UserService) GetUserByUID(ctx context.Context, userUID string) (*model.User, error) {
-	// 尝试从缓存获取
+	logger.Info("Getting user by UID in service", logger.String("uid", userUID))
+
+	// 先从缓存获取
 	cacheKey := cache.UserKey(userUID)
 	var cachedUser model.User
 	err := cache.Get(cacheKey, &cachedUser)
-	if err == nil {
+	if err == nil && cachedUser.UID != "" {
+		logger.Info("Got user from cache", logger.Any("user", cachedUser))
 		return &cachedUser, nil
 	}
 
 	// 从数据库获取
 	user, err := s.userRepo.GetByUID(ctx, userUID)
 	if err != nil {
+		logger.Error("Failed to get user from db",
+			logger.String("uid", userUID),
+			logger.Any("error", err))
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
-	if user == nil {
-		return nil, nil
+
+	if user == nil || user.UID == "" {
+		logger.Error("User not found in db", logger.String("uid", userUID))
+		return nil, errors.New("user not found")
 	}
+
+	logger.Info("Got user from db", logger.Any("user", user))
 
 	// 缓存用户信息
 	if err := cache.Set(cacheKey, user, cache.DefaultExpiration); err != nil {
-		logger.Warn("failed to cache user info", logger.Any("error", err))
+		logger.Warn("Failed to cache user info", logger.Any("error", err))
 	}
 
 	return user, nil

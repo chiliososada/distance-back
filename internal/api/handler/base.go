@@ -75,7 +75,7 @@ func Error(c *gin.Context, err error) {
 
 // GetCurrentUserUID 获取当前用户UID
 func (h *Handler) GetCurrentUserUID(c *gin.Context) string {
-	firebaseUID, exists := c.Get("user_uid")
+	firebaseUID, exists := c.Get("user_id")
 	if !exists {
 		return ""
 	}

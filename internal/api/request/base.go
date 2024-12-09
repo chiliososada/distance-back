@@ -32,6 +32,11 @@ type LocationQuery struct {
 	Longitude float64 `form:"longitude" binding:"required,min=-180,max=180" json:"longitude"` // 经度
 	Radius    float64 `form:"radius" binding:"required,min=0,max=50000" json:"radius"`        // 搜索半径(米)
 }
+type LocationPerson struct {
+	Latitude  float64 `form:"latitude" binding:"required,min=-90,max=90" json:"latitude"`     // 纬度
+	Longitude float64 `form:"longitude" binding:"required,min=-180,max=180" json:"longitude"` // 经度
+
+}
 
 // ValidateSortOrder 验证排序方向
 func (q *SortQuery) ValidateSortOrder() string {
