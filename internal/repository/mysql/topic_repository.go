@@ -22,14 +22,34 @@ func NewTopicRepository(db *gorm.DB) repository.TopicRepository {
 	return &topicRepository{db: db}
 }
 
-// Create 创建话题
+// // Create 创建话题
+//
+//	func (r *topicRepository) Create(ctx context.Context, topic *model.Topic) error {
+//		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+//			if err := tx.Create(topic).Error; err != nil {
+//				return err
+//			}
+//			return nil
+//		})
+//	}
+//
+// Create 创建话题后立即获取完整信息
 func (r *topicRepository) Create(ctx context.Context, topic *model.Topic) error {
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(topic).Error; err != nil {
 			return err
 		}
-		return nil
+
+		// 创建后立即查询完整信息
+		return tx.Preload("User").
+			Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
+				return db.Order("sort_order ASC")
+			}).
+			Preload("Tags").
+			Where("uid = ?", topic.UID).
+			First(topic).Error
 	})
+	return err
 }
 
 // ListByTag 获取带有特定标签的话题列表
@@ -84,9 +104,38 @@ func (r *topicRepository) Delete(ctx context.Context, uid string) error {
 	})
 }
 
+// // GetByUID 根据UID获取话题
+//
+//	func (r *topicRepository) GetByUID(ctx context.Context, uid string) (*model.Topic, error) {
+//		var topic model.Topic
+//		err := r.db.WithContext(ctx).
+//			Preload("User").
+//			Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
+//				return db.Order("sort_order ASC")
+//			}).
+//			Preload("Tags"). // 简化预加载
+//			Where("uid = ?", uid).
+//			First(&topic).Error
+//		// 添加日志检查标签数量
+//		logger.Info("Retrieved topic with tags",
+//			logger.String("topic_uid", uid),
+//			logger.Int("tag_count", len(topic.Tags)))
+//		if err != nil {
+//			if err == gorm.ErrRecordNotFound {
+//				return nil, nil
+//			}
+//			return nil, err
+//		}
+//		return &topic, nil
+//	}
+//
 // GetByUID 根据UID获取话题
 func (r *topicRepository) GetByUID(ctx context.Context, uid string) (*model.Topic, error) {
 	var topic model.Topic
+
+	logger.Info("Getting topic by UID in repository", logger.String("uid", uid))
+
+	// 先获取话题基本信息和关联数据
 	err := r.db.WithContext(ctx).
 		Preload("User").
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
@@ -96,11 +145,45 @@ func (r *topicRepository) GetByUID(ctx context.Context, uid string) (*model.Topi
 		First(&topic).Error
 
 	if err != nil {
+		logger.Error("Failed to get topic basic info",
+			logger.String("uid", uid),
+			logger.Any("error", err))
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil
 		}
 		return nil, err
 	}
+
+	// 单独查询标签
+	var tags []*model.Tag
+	if err := r.db.WithContext(ctx).
+		Table("tags").
+		Select("tags.*").
+		Joins("INNER JOIN topic_tags ON topic_tags.tag_uid = tags.uid").
+		Where("topic_tags.topic_uid = ?", uid).
+		Scan(&tags).Error; err != nil {
+		logger.Error("Failed to get tags",
+			logger.String("uid", uid),
+			logger.Any("error", err))
+	} else {
+		logger.Info("Found tags",
+			logger.String("uid", uid),
+			logger.Int("tag_count", len(tags)))
+		topic.Tags = tags
+	}
+
+	// 验证数据
+	var tagCount int64
+	r.db.WithContext(ctx).
+		Table("topic_tags").
+		Where("topic_uid = ?", uid).
+		Count(&tagCount)
+
+	logger.Info("Topic tags count in database",
+		logger.String("uid", uid),
+		logger.Int64("tag_count", tagCount),
+		logger.Int("tags_in_topic", len(topic.Tags)))
+
 	return &topic, nil
 }
 
@@ -195,6 +278,9 @@ func (r *topicRepository) AddImages(ctx context.Context, topicUID string, images
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, img := range images {
 			img.TopicUID = topicUID
+			if img.UID == "" { // 确保有 UID
+				img.UID = uuid.New().String()
+			}
 			if err := tx.Create(img).Error; err != nil {
 				return err
 			}
@@ -310,22 +396,16 @@ func (r *topicRepository) BatchCreate(ctx context.Context, tags []string) ([]str
 				// 如果标签不存在，创建新标签
 				tag = model.Tag{
 					BaseModel: model.BaseModel{
-						UID: uuid.New().String(), // 确保生成 UUID
+						UID: uuid.New().String(),
 					},
 					Name:     tagName,
-					UseCount: 1,
+					UseCount: 0, // 初始使用次数为 0
 				}
 				if err := tx.Create(&tag).Error; err != nil {
 					return err
 				}
 			} else if err != nil {
 				return err
-			} else {
-				// 如果标签存在，增加使用次数
-				if err := tx.Model(&tag).
-					UpdateColumn("use_count", gorm.Expr("use_count + ?", 1)).Error; err != nil {
-					return err
-				}
 			}
 			tagUIDs = append(tagUIDs, tag.UID)
 		}
