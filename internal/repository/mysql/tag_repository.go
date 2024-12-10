@@ -2,9 +2,12 @@ package mysql
 
 import (
 	"context"
+	"time"
 
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
+	"github.com/chiliososada/distance-back/pkg/logger"
+	"github.com/google/uuid"
 
 	"gorm.io/gorm"
 )
@@ -113,20 +116,47 @@ func (r *tagRepository) BatchCreate(ctx context.Context, tags []string) ([]strin
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, tagName := range tags {
 			var tag model.Tag
+
+			// 查找现有标签
 			err := tx.Where("name = ?", tagName).First(&tag).Error
 			if err == gorm.ErrRecordNotFound {
+				newUID := uuid.New().String()
 				tag = model.Tag{
-					Name: tagName,
+					BaseModel: model.BaseModel{
+						UID:       newUID,
+						CreatedAt: time.Now(),
+						UpdatedAt: time.Now(),
+					},
+					Name:     tagName,
+					UseCount: 0,
 				}
+
+				// 打印调试信息
+				logger.Info("Creating new tag with fields",
+					logger.String("name", tagName),
+					logger.String("uid", tag.UID))
+
 				if err := tx.Create(&tag).Error; err != nil {
+					logger.Error("Failed to create tag",
+						logger.String("name", tagName),
+						logger.Any("error", err))
 					return err
 				}
-			} else if err != nil {
-				return err
+			} else {
+				logger.Info("Found existing tag",
+					logger.String("name", tagName),
+					logger.String("uid", tag.UID))
 			}
+
+			// 确保我们有正确的 UID
 			tagUIDs = append(tagUIDs, tag.UID)
 		}
 		return nil
 	})
+
+	logger.Info("Batch create tags result",
+		logger.Any("tag_uids", tagUIDs),
+		logger.Any("error", err))
+
 	return tagUIDs, err
 }

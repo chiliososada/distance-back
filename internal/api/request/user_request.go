@@ -2,11 +2,23 @@ package request
 
 // RegisterRequest 用户注册请求
 type RegisterRequest struct {
-	Nickname    string `json:"nickname" binding:"required,min=2,max=50"`
-	Email       string `json:"email" binding:"required,email"`
-	Password    string `json:"password" binding:"required,min=8,max=32"`
-	DeviceType  string `json:"device_type" binding:"required,oneof=ios android web"`
-	DeviceToken string `json:"device_token" binding:"required"`
+	Nickname   string     `json:"nickname" binding:"required,min=2,max=50"`
+	BirthDate  string     `json:"birth_date" binding:"required,datetime=2006-01-02"`
+	Bio        string     `json:"bio" binding:"omitempty,max=500"`
+	Gender     string     `json:"gender" binding:"omitempty,oneof=male female other"`
+	Language   string     `json:"language" binding:"omitempty,len=5"`
+	DeviceInfo DeviceInfo `json:"device_info" binding:"required"`
+}
+
+// DeviceInfo 设备信息
+type DeviceInfo struct {
+	DeviceType   string `json:"device_type" binding:"required,oneof=ios android web"`
+	DeviceToken  string `json:"device_token" binding:"required"`
+	DeviceName   string `json:"device_name" binding:"required,max=100"`
+	DeviceModel  string `json:"device_model" binding:"omitempty,max=50"`
+	OSVersion    string `json:"os_version" binding:"omitempty,max=20"`
+	AppVersion   string `json:"app_version" binding:"required,max=20"`
+	PushProvider string `json:"push_provider" binding:"required,oneof=fcm apns web"`
 }
 
 // UpdateProfileRequest 更新资料请求

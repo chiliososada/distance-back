@@ -117,13 +117,29 @@ func (s *UserService) UpdateProfile(ctx context.Context, userUID string, profile
 		return errors.New("user not found")
 	}
 
+	// 验证字段
+	if profile.Nickname != "" && (len(profile.Nickname) < 2 || len(profile.Nickname) > 50) {
+		return errors.New("invalid nickname length")
+	}
 	// 更新可修改的字段
-	user.Nickname = profile.Nickname
-	user.BirthDate = profile.BirthDate
-	user.Gender = profile.Gender
+	if profile.Nickname != "" {
+		user.Nickname = profile.Nickname
+	}
+	if profile.BirthDate != nil {
+		user.BirthDate = profile.BirthDate
+	}
+	if profile.Gender != "" {
+		user.Gender = profile.Gender
+	}
+	if profile.Language != "" {
+		user.Language = profile.Language
+	}
+
+	// 更新可修改的字段
+
 	user.Bio = profile.Bio
 	user.Language = profile.Language
-	user.PrivacyLevel = profile.PrivacyLevel
+
 	user.NotificationEnabled = profile.NotificationEnabled
 	user.LocationSharing = profile.LocationSharing
 	user.PhotoEnabled = profile.PhotoEnabled
@@ -175,21 +191,21 @@ func (s *UserService) UpdateAvatar(ctx context.Context, userUID string, avatar *
 }
 
 // UpdateLocation 更新用户位置
-func (s *UserService) UpdateLocation(ctx context.Context, userUID string, lat, lng float64) error {
+func (s *UserService) UpdateLocation(ctx context.Context, userUID string, lat, lng float64) (*model.User, error) {
 	// 获取现有用户信息
 	user, err := s.GetUserByUID(ctx, userUID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if user == nil {
-		return errors.New("user not found")
+		return nil, errors.New("user not found")
 	}
 
 	// 更新位置信息
 	user.LocationLatitude = lat
 	user.LocationLongitude = lng
 	if err := s.userRepo.Update(ctx, user); err != nil {
-		return fmt.Errorf("failed to update user location: %w", err)
+		return nil, fmt.Errorf("failed to update user location: %w", err)
 	}
 
 	// 更新位置缓存
@@ -202,7 +218,7 @@ func (s *UserService) UpdateLocation(ctx context.Context, userUID string, lat, l
 		logger.Warn("failed to cache user location", logger.Any("error", err))
 	}
 
-	return nil
+	return user, nil
 }
 
 // 在 UserService 中添加这个方法

@@ -11,6 +11,7 @@ import (
 	"github.com/chiliososada/distance-back/pkg/constants"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/chiliososada/distance-back/pkg/storage"
+	"github.com/google/uuid"
 )
 
 type TopicService struct {
@@ -55,13 +56,16 @@ func (s *TopicService) CreateTopic(ctx context.Context, userUID string, topic *m
 	if topic.ExpiresAt.IsZero() {
 		topic.ExpiresAt = time.Now().Add(24 * time.Hour) // 默认24小时后过期
 	}
-
+	// 确保话题有 UID
+	if topic.UID == "" {
+		topic.UID = uuid.New().String()
+	}
 	// 创建话题
 	if err := s.topicRepo.Create(ctx, topic); err != nil {
 		return nil, fmt.Errorf("failed to create topic: %w", err)
 	}
 
-	// 处理图片
+	// 确保话题创建成功后再插入图片
 	if len(images) > 0 {
 		topicImages := make([]*model.TopicImage, 0, len(images))
 		for i, img := range images {
