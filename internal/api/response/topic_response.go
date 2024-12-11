@@ -119,13 +119,13 @@ func ToTopicResponse(topic *model.Topic) *TopicResponse {
 	}
 
 	// Convert tags
-	if len(topic.TopicTags) > 0 {
-		resp.Tags = make([]TagInfo, len(topic.TopicTags))
-		for i, tag := range topic.TopicTags {
+	if len(topic.Tags) > 0 {
+		resp.Tags = make([]TagInfo, len(topic.Tags))
+		for i, tag := range topic.Tags {
 			resp.Tags[i] = TagInfo{
-				UID:      tag.Tag.UID,
-				Name:     tag.Tag.Name,
-				UseCount: tag.Tag.UseCount,
+				UID:      tag.UID,
+				Name:     tag.Name,
+				UseCount: tag.UseCount,
 			}
 		}
 	}

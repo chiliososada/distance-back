@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
@@ -25,41 +24,34 @@ import (
 // @Failure 400,401,403,500 {object} response.Response "错误详情"
 // @Router /api/v1/topics [post]
 func (h *Handler) CreateTopic(c *gin.Context) {
-	// 身份验证
+	// 1. 身份验证
 	userUID := h.GetCurrentUserUID(c)
 	if userUID == "" {
 		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 参数验证
+	// 2. 参数验证
 	var req request.CreateTopicRequest
 	if err := c.ShouldBind(&req); err != nil {
-		logger.Error("创建话题参数验证失败",
+		logger.Error("Invalid create topic request",
 			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err))
 		Error(c, errors.ErrValidation.WithDetails(err.Error()))
 		return
 	}
-	// 手动解析 tags 字段
+	// 解析标签
+	var tags []string
 	if tagsStr := c.PostForm("Tags"); tagsStr != "" {
-		var tags []string
 		if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
 			logger.Error("Failed to parse tags JSON",
 				logger.Any("error", err),
 				logger.String("tags_str", tagsStr))
-		} else {
-			req.Tags = tags
+			Error(c, errors.ErrValidation.WithDetails("Invalid tags format"))
+			return
 		}
 	}
-	// 手动验证 ExpiresAt
-	if !req.ExpiresAt.After(time.Now()) {
-		logger.Error("ExpiresAt is not in the future",
-			logger.Time("expires_at", req.ExpiresAt),
-			logger.Time("current_time", time.Now()))
-		Error(c, errors.ErrValidation.WithDetails("ExpiresAt must be in the future"))
-		return
-	}
+
 	// 处理图片
 	var images []*model.File
 	form, err := c.MultipartForm()
@@ -87,33 +79,16 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 	}
 
 	// 创建话题
-	createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, topic, images)
+	createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, topic, images, tags)
 	if err != nil {
-		logger.Error("创建话题参数验证失败",
+		logger.Error("Failed to create topic",
 			logger.String("path", c.Request.URL.Path),
-			logger.Any("error", err),
-			logger.Time("expires_at", req.ExpiresAt),
-		)
+			logger.Any("error", err))
 		Error(c, errors.ErrOperation.WithDetails(err.Error()))
 		return
 	}
-	// 打印请求数据
-	logger.Info("Received create topic request",
-		logger.Any("request", req))
-	// 处理标签
-	if len(req.Tags) > 0 {
-		logger.Info("Adding tags to topic",
-			logger.Any("tags", req.Tags),
-			logger.String("topic_uid", topic.UID))
 
-		if err := h.topicService.AddTags(c.Request.Context(), topic.UID, req.Tags); err != nil {
-			logger.Error("failed to add tags",
-				logger.Any("error", err),
-				logger.String("topic_uid", topic.UID),
-				logger.Any("tags", req.Tags))
-		}
-	}
-
+	// 返回响应
 	Success(c, response.ToTopicResponse(createdTopic))
 }
 
