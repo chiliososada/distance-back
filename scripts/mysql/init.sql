@@ -212,6 +212,7 @@ CREATE TABLE topic_interactions (
     user_uid VARCHAR(36) NOT NULL COMMENT '用户UUID',
     interaction_type ENUM('like', 'favorite', 'share') NOT NULL COMMENT '互动类型',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '互动时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     interaction_status ENUM('active', 'cancelled') DEFAULT 'active' COMMENT '互动状态',
     UNIQUE KEY uk_uid (uid),
     FOREIGN KEY (topic_uid) REFERENCES topics(uid),

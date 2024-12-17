@@ -224,12 +224,12 @@ func (s *TopicService) DeleteTopic(ctx context.Context, userUID string, topicUID
 // GetTopicByUID 获取话题详情
 func (s *TopicService) GetTopicByUID(ctx context.Context, topicUID string) (*model.Topic, error) {
 	// 尝试从缓存获取
-	cacheKey := cache.TopicKey(topicUID)
-	var cachedTopic model.Topic
-	err := cache.Get(cacheKey, &cachedTopic)
-	if err == nil {
-		return &cachedTopic, nil
-	}
+	// cacheKey := cache.TopicKey(topicUID)
+	// var cachedTopic model.Topic
+	// err := cache.Get(cacheKey, &cachedTopic)
+	// if err == nil {
+	// 	return &cachedTopic, nil
+	// }
 
 	// 从数据库获取
 	topic, err := s.topicRepo.GetByUID(ctx, topicUID)
@@ -241,9 +241,9 @@ func (s *TopicService) GetTopicByUID(ctx context.Context, topicUID string) (*mod
 	}
 
 	// 缓存话题信息
-	if err := cache.Set(cacheKey, topic, cache.DefaultExpiration); err != nil {
-		logger.Warn("failed to cache topic", logger.Any("error", err))
-	}
+	// if err := cache.Set(cacheKey, topic, cache.DefaultExpiration); err != nil {
+	// 	logger.Warn("failed to cache topic", logger.Any("error", err))
+	// }
 
 	return topic, nil
 }

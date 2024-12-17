@@ -202,6 +202,7 @@ func (r *topicRepository) List(ctx context.Context, offset, limit int) ([]*model
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC")
 		}).
+		Preload("Tags"). // 添加这行来预加载标签
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -260,6 +261,7 @@ func (r *topicRepository) GetNearbyTopics(ctx context.Context, lat, lng float64,
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC")
 		}).
+		Preload("Tags"). // 添加这行来预加载标签
 		Select("*, "+distanceSQL+" as distance", lng, lat).
 		Order("created_at DESC").
 		Offset(offset).
@@ -425,14 +427,59 @@ func (r *topicRepository) ListPopular(ctx context.Context, limit int) ([]*model.
 	return tags, err
 }
 
-// AddInteraction 添加话题互动
+// // AddInteraction 添加话题互动
+//
+//	func (r *topicRepository) AddInteraction(ctx context.Context, interaction *model.TopicInteraction) error {
+//		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+//			if err := tx.Create(interaction).Error; err != nil {
+//				return err
+//			}
+//			// 更新计数
+//			return r.UpdateCounts(ctx, interaction.TopicUID)
+//		})
+//	}
 func (r *topicRepository) AddInteraction(ctx context.Context, interaction *model.TopicInteraction) error {
+	// 首先在事务外检查是否存在交互
+	var existingInteraction model.TopicInteraction
+	err := r.db.WithContext(ctx).
+		Where("topic_uid = ? AND user_uid = ? AND interaction_type = ?",
+			interaction.TopicUID, interaction.UserUID, interaction.InteractionType).
+		First(&existingInteraction).Error
+
+	// 开始事务
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(interaction).Error; err != nil {
-			return err
+		if err == gorm.ErrRecordNotFound {
+			// 不存在则创建
+			if err := tx.Create(interaction).Error; err != nil {
+				return fmt.Errorf("failed to create interaction: %v", err)
+			}
+		} else if err == nil {
+			// 存在则更新状态
+			existingInteraction.InteractionStatus = interaction.InteractionStatus
+			if err := tx.Save(&existingInteraction).Error; err != nil {
+				return fmt.Errorf("failed to update interaction: %v", err)
+			}
+		} else {
+			return fmt.Errorf("failed to check interaction: %v", err)
 		}
-		// 更新计数
-		return r.UpdateCounts(ctx, interaction.TopicUID)
+
+		// 使用单个 SQL 更新点赞数
+		updateSQL := `
+            UPDATE topics t 
+            SET likes_count = (
+                SELECT COUNT(*) 
+                FROM topic_interactions ti 
+                WHERE ti.topic_uid = ? 
+                AND ti.interaction_type = 'like' 
+                AND ti.interaction_status = 'active'
+            )
+            WHERE t.uid = ?
+        `
+		if err := tx.Exec(updateSQL, interaction.TopicUID, interaction.TopicUID).Error; err != nil {
+			return fmt.Errorf("failed to update like count: %v", err)
+		}
+
+		return nil
 	})
 }
 
