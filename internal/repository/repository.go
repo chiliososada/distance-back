@@ -50,7 +50,7 @@ type TopicRepository interface {
 	// 图片相关
 	AddImages(ctx context.Context, topicUID string, images []*model.TopicImage) error
 	GetImages(ctx context.Context, topicUID string) ([]*model.TopicImage, error)
-
+	DeleteTopicImages(ctx context.Context, topicUID string, imageUIDs []string) error
 	// 标签相关
 	AddTags(ctx context.Context, topicUID string, tagUIDs []string) error
 	RemoveTags(ctx context.Context, topicUID string, tagUIDs []string) error

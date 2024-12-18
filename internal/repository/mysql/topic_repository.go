@@ -275,6 +275,31 @@ func (r *topicRepository) GetNearbyTopics(ctx context.Context, lat, lng float64,
 	return topics, total, nil
 }
 
+// DeleteTopicImages 删除话题的照片
+func (r *topicRepository) DeleteTopicImages(ctx context.Context, topicUID string, imageUIDs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 检查图片是否属于该话题
+		var count int64
+		if err := tx.Model(&model.TopicImage{}).
+			Where("topic_uid = ? AND uid IN ?", topicUID, imageUIDs).
+			Count(&count).Error; err != nil {
+			return err
+		}
+
+		if int(count) != len(imageUIDs) {
+			return fmt.Errorf("some images do not belong to this topic")
+		}
+
+		// 删除图片记录
+		if err := tx.Where("topic_uid = ? AND uid IN ?", topicUID, imageUIDs).
+			Delete(&model.TopicImage{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
 // AddImages 添加话题图片
 func (r *topicRepository) AddImages(ctx context.Context, topicUID string, images []*model.TopicImage) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

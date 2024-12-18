@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
@@ -105,28 +106,45 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 // @Failure 400,401,403,404 {object} response.Response "错误详情"
 // @Router /api/v1/topics/{id} [put]
 func (h *Handler) UpdateTopic(c *gin.Context) {
-	// 身份验证
+
 	userUID := h.GetCurrentUserUID(c)
 	if userUID == "" {
 		Error(c, errors.ErrUnauthorized)
 		return
 	}
 
-	// 获取话题UUID
 	topicUID, err := ParseUUID(c, "id")
 	if err != nil {
-		Error(c, errors.ErrValidation.WithDetails("无效的话题ID"))
+		Error(c, err)
 		return
 	}
 
-	// 参数验证
 	var req request.UpdateTopicRequest
 	if err := c.ShouldBind(&req); err != nil {
-		logger.Error("更新话题参数验证失败",
-			logger.String("path", c.Request.URL.Path),
-			logger.Any("error", err))
-		Error(c, errors.ErrValidation.WithDetails(err.Error()))
+		Error(c, err)
 		return
+	}
+
+	logger.Error("RemoveImageUIDs",
+		logger.String("remove_image_uids", fmt.Sprintf("%v", req.RemoveImageUIDs)), // 确保类型兼容
+		logger.Any("error", err),
+		logger.String("user_uid", userUID),
+		logger.String("topic_uid", topicUID))
+
+	// 处理上传的图片
+	var newImages []*model.File
+	form, err := c.MultipartForm()
+	if err == nil && form != nil && form.File["images"] != nil {
+		files := form.File["images"]
+		newImages = make([]*model.File, len(files))
+		for i, file := range files {
+			newImages[i] = &model.File{
+				File: file,
+				Type: "image",
+				Name: file.Filename,
+				Size: uint(file.Size),
+			}
+		}
 	}
 
 	// 构建更新模型
@@ -139,14 +157,22 @@ func (h *Handler) UpdateTopic(c *gin.Context) {
 		ExpiresAt: req.ExpiresAt,
 	}
 
-	// 执行更新
-	if err := h.topicService.UpdateTopic(c.Request.Context(), userUID, topic); err != nil {
+	// 执行更新，传入所有必要的参数
+	if err := h.topicService.UpdateTopic(
+		c.Request.Context(),
+		userUID,
+		topic,
+		newImages,
+		req.RemoveImageUIDs,
+		req.Tags,
+	); err != nil {
 		logger.Error("更新话题失败",
 			logger.String("path", c.Request.URL.Path),
 			logger.Any("error", err),
 			logger.String("user_uid", userUID),
 			logger.String("topic_uid", topicUID))
-		Error(c, errors.ErrOperation.WithDetails(err.Error()))
+
+		Error(c, err)
 		return
 	}
 
