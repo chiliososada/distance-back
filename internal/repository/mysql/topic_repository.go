@@ -87,20 +87,40 @@ func (r *topicRepository) Update(ctx context.Context, topic *model.Topic) error 
 }
 
 // Delete 删除话题
+//
+//	func (r *topicRepository) Delete(ctx context.Context, uid string) error {
+//		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+//			// 删除话题相关的所有数据
+//			if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicImage{}).Error; err != nil {
+//				return err
+//			}
+//			if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicTag{}).Error; err != nil {
+//				return err
+//			}
+//			if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicInteraction{}).Error; err != nil {
+//				return err
+//			}
+//			// 删除话题
+//			return tx.Where("uid = ?", uid).Delete(&model.Topic{}).Error
+//		})
+//	}
+//
+// Delete 删除话题（软删除）
 func (r *topicRepository) Delete(ctx context.Context, uid string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 删除话题相关的所有数据
-		if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicImage{}).Error; err != nil {
+		// 更新话题状态为closed
+		if err := tx.Model(&model.Topic{}).
+			Where("uid = ?", uid).
+			Update("status", "closed").Error; err != nil {
+			logger.Error("Failed to update topic status",
+				logger.String("topic_uid", uid),
+				logger.Any("error", err))
 			return err
 		}
-		if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicTag{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicInteraction{}).Error; err != nil {
-			return err
-		}
-		// 删除话题
-		return tx.Where("uid = ?", uid).Delete(&model.Topic{}).Error
+
+		logger.Info("Successfully closed topic",
+			logger.String("topic_uid", uid))
+		return nil
 	})
 }
 
@@ -230,6 +250,7 @@ func (r *topicRepository) ListByUser(ctx context.Context, userUID string, offset
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC")
 		}).
+		Preload("Tags"). // 添加这行来预加载标签
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
