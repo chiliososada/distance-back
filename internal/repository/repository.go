@@ -109,7 +109,7 @@ type RelationshipRepository interface {
 	Create(ctx context.Context, relationship *model.UserRelationship) error
 	Update(ctx context.Context, relationship *model.UserRelationship) error
 	Delete(ctx context.Context, followerUID, followingUID string) error
-
+	AcceptFollow(ctx context.Context, relationship *model.UserRelationship) error
 	// 查询操作
 	GetRelationship(ctx context.Context, followerUID, followingUID string) (*model.UserRelationship, error)
 	GetFollowers(ctx context.Context, userUID string, status string, offset, limit int) ([]*model.UserRelationship, int64, error)

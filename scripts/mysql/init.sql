@@ -128,7 +128,7 @@ CREATE TABLE user_relationships (
     uid VARCHAR(36) NOT NULL DEFAULT (UUID()) COMMENT '关系UUID',
     follower_uid VARCHAR(36) NOT NULL COMMENT '关注人UUID',
     following_uid VARCHAR(36) NOT NULL COMMENT '被关注人UUID',
-    status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending' COMMENT '关系状态：pending-等待确认, accepted-已确认, blocked-已屏蔽',
+    status ENUM('pending', 'accepted', 'rejected', 'blocked') DEFAULT 'pending' COMMENT '关系状态：pending-等待确认, accepted-已确认, rejected-已拒绝, rejected-已拉黑',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '关系创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '关系更新时间',
     accepted_at TIMESTAMP NULL DEFAULT NULL COMMENT '关系确认时间',

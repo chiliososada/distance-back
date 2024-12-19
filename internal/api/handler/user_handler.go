@@ -363,13 +363,13 @@ func (h *Handler) GetUserProfile(c *gin.Context) {
 		isFollowing, _ := h.relationshipService.IsFollowing(c.Request.Context(), currentUserUID, targetUID)
 		isFollowed, _ := h.relationshipService.IsFollowed(c.Request.Context(), currentUserUID, targetUID)
 		isFriend, _ := h.relationshipService.IsFriend(c.Request.Context(), currentUserUID, targetUID)
-		isBlocked, _ := h.relationshipService.IsBlocked(c.Request.Context(), currentUserUID, targetUID)
+		isRejected, _ := h.relationshipService.IsRejected(c.Request.Context(), currentUserUID, targetUID)
 
 		relationship = &response.Relationship{
 			IsFollowing: isFollowing,
 			IsFollowed:  isFollowed,
 			IsFriend:    isFriend,
-			IsBlocked:   isBlocked,
+			IsRejected:  isRejected,
 		}
 	}
 

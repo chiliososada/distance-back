@@ -28,7 +28,7 @@ type RelationshipStatusResponse struct {
 	IsFollowing bool `json:"is_following"` // 是否关注
 	IsFollowed  bool `json:"is_followed"`  // 是否被关注
 	IsFriend    bool `json:"is_friend"`    // 是否好友
-	IsBlocked   bool `json:"is_blocked"`   // 是否拉黑
+	IsRejected  bool `json:"is_rejected"`  // 是否拉黑
 }
 
 // FriendResponse 好友响应
