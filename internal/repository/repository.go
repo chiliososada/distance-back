@@ -76,12 +76,13 @@ type TopicRepository interface {
 
 // ChatRepository 聊天仓储接口
 type ChatRepository interface {
+
 	// 聊天室操作
 	CreateRoom(ctx context.Context, room *model.ChatRoom) error
 	UpdateRoom(ctx context.Context, room *model.ChatRoom) error
 	GetRoomByUID(ctx context.Context, uid string) (*model.ChatRoom, error)
 	ListUserRooms(ctx context.Context, userUID string, offset, limit int) ([]*model.ChatRoom, int64, error)
-
+	FindPrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error)
 	// 成员操作
 	AddMember(ctx context.Context, member *model.ChatRoomMember) error
 	RemoveMember(ctx context.Context, roomUID, userUID string) error

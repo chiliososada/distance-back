@@ -197,24 +197,52 @@ func (s *RelationshipService) IsFriend(ctx context.Context, userUID1, userUID2 s
 }
 
 // 处理互相关注（好友）情况
+// handleMutualFollow 处理互相关注（好友）情况
 func (s *RelationshipService) handleMutualFollow(ctx context.Context, userUID1, userUID2 string) {
-	isFriend, err := s.IsFriend(ctx, userUID1, userUID2)
+	// 检查反向关系是否已经是accepted状态
+	reverseRelationship, err := s.relationRepo.GetRelationship(ctx, userUID2, userUID1)
 	if err != nil {
-		logger.Error("failed to check friend status",
+		logger.Error("Failed to get reverse relationship",
 			logger.Any("error", err),
 			logger.String("user1", userUID1),
 			logger.String("user2", userUID2))
 		return
 	}
 
-	if isFriend {
-		// 创建私聊房间
-		_, err := s.chatService.CreatePrivateRoom(ctx, userUID1, userUID2)
+	// 如果反向关系也是accepted，说明是互相关注
+	if reverseRelationship != nil && reverseRelationship.Status == "accepted" {
+		logger.Info("Mutual follow confirmed, creating chat room",
+			logger.String("user1", userUID1),
+			logger.String("user2", userUID2))
+
+		// 检查是否已存在聊天室
+		existingRoom, err := s.chatService.findPrivateRoom(ctx, userUID1, userUID2)
 		if err != nil {
-			logger.Error("failed to create private room",
+			logger.Error("Failed to check existing chat room",
 				logger.Any("error", err),
 				logger.String("user1", userUID1),
 				logger.String("user2", userUID2))
+			return
 		}
+
+		if existingRoom != nil {
+			logger.Info("Chat room already exists",
+				logger.String("room_uid", existingRoom.UID))
+			return
+		}
+
+		// 创建私聊房间
+		_, err = s.chatService.CreatePrivateRoom(ctx, userUID1, userUID2)
+		if err != nil {
+			logger.Error("Failed to create private room",
+				logger.Any("error", err),
+				logger.String("user1", userUID1),
+				logger.String("user2", userUID2))
+			return
+		}
+
+		logger.Info("Successfully created private room",
+			logger.String("user1", userUID1),
+			logger.String("user2", userUID2))
 	}
 }
