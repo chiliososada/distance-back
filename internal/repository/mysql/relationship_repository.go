@@ -40,7 +40,8 @@ func (r *relationshipRepository) Create(ctx context.Context, relationship *model
 			return err
 		}
 
-		// 创建新关系
+		// 创建新关系时应该设置为 pending
+		relationship.Status = "pending"
 		if relationship.Status == "accepted" {
 			now := time.Now()
 			relationship.AcceptedAt = &now
@@ -56,6 +57,39 @@ func (r *relationshipRepository) Update(ctx context.Context, relationship *model
 		relationship.AcceptedAt = &now
 	}
 	return r.db.WithContext(ctx).Save(relationship).Error
+}
+
+// mysql 实现
+func (r *relationshipRepository) AcceptFollow(ctx context.Context, relationship *model.UserRelationship) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 更新原关注关系
+		if err := tx.Save(relationship).Error; err != nil {
+			return err
+		}
+
+		// 检查是否存在反向关系
+		var reverseRelationship model.UserRelationship
+		err := tx.Where("follower_uid = ? AND following_uid = ?",
+			relationship.FollowingUID, relationship.FollowerUID).
+			First(&reverseRelationship).Error
+
+		if err == gorm.ErrRecordNotFound {
+			// 创建反向关系
+			reverseRelationship = model.UserRelationship{
+				FollowerUID:  relationship.FollowingUID,
+				FollowingUID: relationship.FollowerUID,
+				Status:       "accepted",
+				AcceptedAt:   relationship.AcceptedAt,
+			}
+			if err := tx.Create(&reverseRelationship).Error; err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // Delete 删除关系

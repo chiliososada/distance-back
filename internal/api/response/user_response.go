@@ -50,7 +50,7 @@ type Relationship struct {
 	IsFollowing bool `json:"is_following"`
 	IsFollowed  bool `json:"is_followed"`
 	IsFriend    bool `json:"is_friend"`
-	IsBlocked   bool `json:"is_blocked"`
+	IsRejected  bool `json:"is_rejected"`
 }
 
 // 使用泛型定义分页响应类型

@@ -44,34 +44,58 @@ func (r *chatRepository) GetRoomByUID(ctx context.Context, uid string) (*model.C
 	return &room, nil
 }
 
+// 检查私聊关系
+func (r *chatRepository) FindPrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error) {
+	// 调整顺序以匹配视图中的 user_uid1 < user_uid2 条件
+	uid1, uid2 := userUID1, userUID2
+	if uid1 > uid2 {
+		uid1, uid2 = uid2, uid1
+	}
+
+	var privateChatView model.PrivateChatView
+	err := r.db.WithContext(ctx).
+		Table("v_private_chats").
+		Where("user_uid1 = ? AND user_uid2 = ?", uid1, uid2).
+		First(&privateChatView).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// 如果找到了记录，返回完整的聊天室信息
+	return r.GetRoomByUID(ctx, privateChatView.RoomUID)
+}
+
 // ListUserRooms 获取用户的聊天室列表
 func (r *chatRepository) ListUserRooms(ctx context.Context, userUID string, offset, limit int) ([]*model.ChatRoom, int64, error) {
 	var rooms []*model.ChatRoom
 	var total int64
 
-	subQuery := r.db.Model(&model.ChatRoomMember{}).
-		Select("chat_room_uid").
-		Where("user_uid = ?", userUID)
-
-	db := r.db.WithContext(ctx).
-		Where("uid IN (?)", subQuery)
+	// 使用子查询获取用户参与的聊天室
+	subQuery := r.db.Table("chat_room_members").Select("chat_room_uid").Where("user_uid = ?", userUID)
 
 	// 获取总数
-	if err := db.Model(&model.ChatRoom{}).Count(&total).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Model(&model.ChatRoom{}).
+		Where("uid IN (?)", subQuery).
+		Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 获取聊天室列表，包括成员信息和最后一条消息
-	err := db.Preload("ChatRoomMembers", func(db *gorm.DB) *gorm.DB {
-		return db.Order("joined_at DESC")
-	}).
+	// 获取聊天室列表
+	if err := r.db.WithContext(ctx).
+		Preload("ChatRoomMembers", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at DESC")
+		}).
 		Preload("ChatRoomMembers.User").
+		Where("uid IN (?)", subQuery).
 		Order("updated_at DESC").
 		Offset(offset).
 		Limit(limit).
-		Find(&rooms).Error
-
-	if err != nil {
+		Find(&rooms).Error; err != nil {
 		return nil, 0, err
 	}
 

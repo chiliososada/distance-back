@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
 	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/chiliososada/distance-back/pkg/storage"
+	"github.com/google/uuid"
 )
 
 // 服务层参数结构定义
@@ -72,42 +74,65 @@ func NewChatService(
 
 // CreatePrivateRoom 创建私聊房间
 func (s *ChatService) CreatePrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error) {
-	// 检查用户是否存在
+	// 1. 检查用户是否存在
 	user1, err := s.userRepo.GetByUID(ctx, userUID1)
 	if err != nil || user1 == nil {
 		return nil, errors.ErrUserNotFound
 	}
+
 	user2, err := s.userRepo.GetByUID(ctx, userUID2)
 	if err != nil || user2 == nil {
 		return nil, errors.ErrUserNotFound
 	}
 
-	// 检查是否已经存在私聊房间
-	existingRoom, err := s.findPrivateRoom(ctx, userUID1, userUID2)
+	// 2. 检查是否已经存在私聊房间
+	existingRoom, err := s.chatRepo.FindPrivateRoom(ctx, userUID1, userUID2)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to check existing room: %w", err)
 	}
 	if existingRoom != nil {
 		return existingRoom, nil
 	}
 
+	// 3. 创建新的私聊房间
+	now := time.Now()
 	room := &model.ChatRoom{
+		BaseModel: model.BaseModel{
+			UID:       uuid.New().String(),
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
 		Name: fmt.Sprintf("%s & %s", user1.Nickname, user2.Nickname),
 		Type: "individual",
 	}
 
-	if err := s.chatRepo.CreateRoom(ctx, room); err != nil {
+	// 使用事务创建房间和成员
+	err = s.chatRepo.CreateRoom(ctx, room)
+	if err != nil {
+		logger.Error("Failed to create chat room",
+			logger.Any("error", err))
 		return nil, fmt.Errorf("failed to create chat room: %w", err)
 	}
 
+	// 4. 创建成员记录
 	members := []*model.ChatRoomMember{
 		{
+			BaseModel: model.BaseModel{
+				UID:       uuid.New().String(),
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
 			ChatRoomUID: room.UID,
 			UserUID:     userUID1,
 			Role:        "member",
 			Nickname:    user1.Nickname,
 		},
 		{
+			BaseModel: model.BaseModel{
+				UID:       uuid.New().String(),
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
 			ChatRoomUID: room.UID,
 			UserUID:     userUID2,
 			Role:        "member",
@@ -115,11 +140,21 @@ func (s *ChatService) CreatePrivateRoom(ctx context.Context, userUID1, userUID2 
 		},
 	}
 
+	// 添加成员
 	for _, member := range members {
 		if err := s.chatRepo.AddMember(ctx, member); err != nil {
+			logger.Error("Failed to add member",
+				logger.String("room_uid", room.UID),
+				logger.String("user_uid", member.UserUID),
+				logger.Any("error", err))
 			return nil, fmt.Errorf("failed to add member: %w", err)
 		}
 	}
+
+	logger.Info("Successfully created private room",
+		logger.String("room_uid", room.UID),
+		logger.String("user1", userUID1),
+		logger.String("user2", userUID2))
 
 	return room, nil
 }
@@ -582,32 +617,7 @@ func (s *ChatService) getMemberInfo(ctx context.Context, roomUID, userUID string
 }
 
 // findPrivateRoom 查找两个用户之间的私聊房间
+
 func (s *ChatService) findPrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error) {
-	rooms, _, err := s.chatRepo.ListUserRooms(ctx, userUID1, 0, 1000)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, room := range rooms {
-		if room.Type != "individual" {
-			continue
-		}
-
-		members, err := s.chatRepo.GetRoomMembers(ctx, room.UID)
-		if err != nil {
-			continue
-		}
-
-		if len(members) == 2 {
-			memberUIDs := map[string]bool{
-				members[0].UserUID: true,
-				members[1].UserUID: true,
-			}
-			if memberUIDs[userUID1] && memberUIDs[userUID2] {
-				return room, nil
-			}
-		}
-	}
-
-	return nil, nil
+	return s.chatRepo.FindPrivateRoom(ctx, userUID1, userUID2)
 }

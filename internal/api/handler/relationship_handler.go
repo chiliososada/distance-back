@@ -281,13 +281,13 @@ func (h *Handler) CheckRelationship(c *gin.Context) {
 	isFollowing, _ := h.relationshipService.IsFollowing(c.Request.Context(), userUID, targetUID)
 	isFollowed, _ := h.relationshipService.IsFollowed(c.Request.Context(), userUID, targetUID)
 	isFriend, _ := h.relationshipService.IsFriend(c.Request.Context(), userUID, targetUID)
-	isBlocked, _ := h.relationshipService.IsBlocked(c.Request.Context(), targetUID, userUID)
+	IsRejected, _ := h.relationshipService.IsRejected(c.Request.Context(), targetUID, userUID)
 
 	status := &response.RelationshipStatusResponse{
 		IsFollowing: isFollowing,
 		IsFollowed:  isFollowed,
 		IsFriend:    isFriend,
-		IsBlocked:   isBlocked,
+		IsRejected:  IsRejected,
 	}
 
 	Success(c, status)

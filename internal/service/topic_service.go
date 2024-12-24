@@ -152,40 +152,148 @@ func (s *TopicService) CreateTopic(ctx context.Context, userUID string, topic *m
 }
 
 // UpdateTopic 更新话题
-func (s *TopicService) UpdateTopic(ctx context.Context, userUID string, topic *model.Topic) error {
+func (s *TopicService) UpdateTopic(
+	ctx context.Context,
+	userUID string,
+	topic *model.Topic,
+	newImages []*model.File,
+	removeImageUIDs []string,
+	tags []string,
+) error {
 	// 获取原话题信息
 	existingTopic, err := s.GetTopicByUID(ctx, topic.UID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get topic: %w", err)
 	}
 	if existingTopic == nil {
-		return ErrTopicNotFound
+
+		return fmt.Errorf("failed to get existingTopic: %w", err)
 	}
 
 	// 验证权限
 	if existingTopic.UserUID != userUID {
-		return ErrForbidden
+		return fmt.Errorf("TopicNotFound: %w", err)
 	}
 
 	// 检查话题状态
-	if existingTopic.Status != "active" {
-		return ErrInvalidTopicStatus
+	if existingTopic.Status != model.TopicStatusActive {
+		return fmt.Errorf("TopicNotActive: %w", err)
 	}
 
-	// 只更新允许修改的字段
+	// 更新基本信息
 	existingTopic.Title = topic.Title
 	existingTopic.Content = topic.Content
 	existingTopic.ExpiresAt = topic.ExpiresAt
 
-	// 保存更新
+	// 保存基本信息更新
 	if err := s.topicRepo.Update(ctx, existingTopic); err != nil {
 		return fmt.Errorf("failed to update topic: %w", err)
+	}
+
+	// 处理要删除的图片
+	if len(removeImageUIDs) > 0 {
+		logger.Info("Deleting images",
+			logger.Any("remove_image_uids", removeImageUIDs))
+		// 获取要删除的图片信息
+		images, err := s.topicRepo.GetImages(ctx, topic.UID)
+		if err != nil {
+			return fmt.Errorf("failed to get images: %w", err)
+		}
+
+		// 找出需要删除的图片URL
+		var imageURLsToDelete []string
+		for _, image := range images {
+			for _, uidToRemove := range removeImageUIDs {
+				if image.UID == uidToRemove {
+					imageURLsToDelete = append(imageURLsToDelete, image.ImageURL)
+				}
+			}
+		}
+
+		// 删除存储服务中的图片
+		for _, url := range imageURLsToDelete {
+			if err := storage.GetStorage().DeleteFile(ctx, url); err != nil {
+				logger.Error("Failed to delete image file",
+					logger.String("url", url),
+					logger.Any("error", err))
+			}
+		}
+
+		// 删除数据库中的图片关联
+		if err := s.topicRepo.DeleteTopicImages(ctx, topic.UID, removeImageUIDs); err != nil {
+			return fmt.Errorf("failed to remove images: %w", err)
+		}
+	}
+
+	// 处理新图片
+	if len(newImages) > 0 {
+		// 上传图片并创建图片记录
+		topicImages := make([]*model.TopicImage, len(newImages))
+		for i, img := range newImages {
+			// 构建存储路径
+			directory := fmt.Sprintf("topics/%s", topic.UID)
+			// 上传文件
+			imageURL, err := storage.GetStorage().UploadFile(ctx, img.File, directory)
+			if err != nil {
+				return fmt.Errorf("failed to upload image: %w", err)
+			}
+
+			// 创建图片记录
+			topicImages[i] = &model.TopicImage{
+				TopicUID:    topic.UID,
+				ImageURL:    imageURL,
+				ImageWidth:  uint(img.Width),
+				ImageHeight: uint(img.Height),
+				FileSize:    img.Size,
+				SortOrder:   uint(i),
+			}
+		}
+
+		// 保存图片记录
+		if err := s.topicRepo.AddImages(ctx, topic.UID, topicImages); err != nil {
+			return fmt.Errorf("failed to add images: %w", err)
+		}
+	}
+
+	// 处理标签更新
+	if tags != nil {
+		// 获取现有标签
+		existingTags, err := s.topicRepo.GetTags(ctx, topic.UID)
+		if err != nil {
+			return fmt.Errorf("failed to get existing tags: %w", err)
+		}
+
+		// 删除现有标签
+		existingTagUIDs := make([]string, len(existingTags))
+		for i, tag := range existingTags {
+			existingTagUIDs[i] = tag.UID
+		}
+
+		if err := s.topicRepo.RemoveTags(ctx, topic.UID, existingTagUIDs); err != nil {
+			return fmt.Errorf("failed to remove tags: %w", err)
+		}
+
+		// 添加新标签
+		if len(tags) > 0 {
+			// 批量创建或获取标签
+			tagUIDs, err := s.topicRepo.BatchCreate(ctx, tags)
+			if err != nil {
+				return fmt.Errorf("failed to create tags: %w", err)
+			}
+
+			// 建立标签关联
+			if err := s.topicRepo.AddTags(ctx, topic.UID, tagUIDs); err != nil {
+				return fmt.Errorf("failed to add tags: %w", err)
+			}
+		}
 	}
 
 	// 清除缓存
 	cacheKey := cache.TopicKey(topic.UID)
 	if err := cache.Delete(cacheKey); err != nil {
-		logger.Warn("failed to delete topic cache", logger.Any("error", err))
+		logger.Warn("Failed to delete topic cache",
+			logger.String("topic_uid", topic.UID),
+			logger.Any("error", err))
 	}
 
 	return nil
@@ -224,12 +332,12 @@ func (s *TopicService) DeleteTopic(ctx context.Context, userUID string, topicUID
 // GetTopicByUID 获取话题详情
 func (s *TopicService) GetTopicByUID(ctx context.Context, topicUID string) (*model.Topic, error) {
 	// 尝试从缓存获取
-	cacheKey := cache.TopicKey(topicUID)
-	var cachedTopic model.Topic
-	err := cache.Get(cacheKey, &cachedTopic)
-	if err == nil {
-		return &cachedTopic, nil
-	}
+	// cacheKey := cache.TopicKey(topicUID)
+	// var cachedTopic model.Topic
+	// err := cache.Get(cacheKey, &cachedTopic)
+	// if err == nil {
+	// 	return &cachedTopic, nil
+	// }
 
 	// 从数据库获取
 	topic, err := s.topicRepo.GetByUID(ctx, topicUID)
@@ -241,9 +349,9 @@ func (s *TopicService) GetTopicByUID(ctx context.Context, topicUID string) (*mod
 	}
 
 	// 缓存话题信息
-	if err := cache.Set(cacheKey, topic, cache.DefaultExpiration); err != nil {
-		logger.Warn("failed to cache topic", logger.Any("error", err))
-	}
+	// if err := cache.Set(cacheKey, topic, cache.DefaultExpiration); err != nil {
+	// 	logger.Warn("failed to cache topic", logger.Any("error", err))
+	// }
 
 	return topic, nil
 }

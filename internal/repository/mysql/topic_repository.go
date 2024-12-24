@@ -87,20 +87,40 @@ func (r *topicRepository) Update(ctx context.Context, topic *model.Topic) error 
 }
 
 // Delete 删除话题
+//
+//	func (r *topicRepository) Delete(ctx context.Context, uid string) error {
+//		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+//			// 删除话题相关的所有数据
+//			if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicImage{}).Error; err != nil {
+//				return err
+//			}
+//			if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicTag{}).Error; err != nil {
+//				return err
+//			}
+//			if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicInteraction{}).Error; err != nil {
+//				return err
+//			}
+//			// 删除话题
+//			return tx.Where("uid = ?", uid).Delete(&model.Topic{}).Error
+//		})
+//	}
+//
+// Delete 删除话题（软删除）
 func (r *topicRepository) Delete(ctx context.Context, uid string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 删除话题相关的所有数据
-		if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicImage{}).Error; err != nil {
+		// 更新话题状态为closed
+		if err := tx.Model(&model.Topic{}).
+			Where("uid = ?", uid).
+			Update("status", "closed").Error; err != nil {
+			logger.Error("Failed to update topic status",
+				logger.String("topic_uid", uid),
+				logger.Any("error", err))
 			return err
 		}
-		if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicTag{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("topic_uid = ?", uid).Delete(&model.TopicInteraction{}).Error; err != nil {
-			return err
-		}
-		// 删除话题
-		return tx.Where("uid = ?", uid).Delete(&model.Topic{}).Error
+
+		logger.Info("Successfully closed topic",
+			logger.String("topic_uid", uid))
+		return nil
 	})
 }
 
@@ -202,6 +222,7 @@ func (r *topicRepository) List(ctx context.Context, offset, limit int) ([]*model
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC")
 		}).
+		Preload("Tags"). // 添加这行来预加载标签
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -229,6 +250,7 @@ func (r *topicRepository) ListByUser(ctx context.Context, userUID string, offset
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC")
 		}).
+		Preload("Tags"). // 添加这行来预加载标签
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -260,6 +282,7 @@ func (r *topicRepository) GetNearbyTopics(ctx context.Context, lat, lng float64,
 		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
 			return db.Order("sort_order ASC")
 		}).
+		Preload("Tags"). // 添加这行来预加载标签
 		Select("*, "+distanceSQL+" as distance", lng, lat).
 		Order("created_at DESC").
 		Offset(offset).
@@ -271,6 +294,31 @@ func (r *topicRepository) GetNearbyTopics(ctx context.Context, lat, lng float64,
 	}
 
 	return topics, total, nil
+}
+
+// DeleteTopicImages 删除话题的照片
+func (r *topicRepository) DeleteTopicImages(ctx context.Context, topicUID string, imageUIDs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 检查图片是否属于该话题
+		var count int64
+		if err := tx.Model(&model.TopicImage{}).
+			Where("topic_uid = ? AND uid IN ?", topicUID, imageUIDs).
+			Count(&count).Error; err != nil {
+			return err
+		}
+
+		if int(count) != len(imageUIDs) {
+			return fmt.Errorf("some images do not belong to this topic")
+		}
+
+		// 删除图片记录
+		if err := tx.Where("topic_uid = ? AND uid IN ?", topicUID, imageUIDs).
+			Delete(&model.TopicImage{}).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 // AddImages 添加话题图片
@@ -425,14 +473,59 @@ func (r *topicRepository) ListPopular(ctx context.Context, limit int) ([]*model.
 	return tags, err
 }
 
-// AddInteraction 添加话题互动
+// // AddInteraction 添加话题互动
+//
+//	func (r *topicRepository) AddInteraction(ctx context.Context, interaction *model.TopicInteraction) error {
+//		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+//			if err := tx.Create(interaction).Error; err != nil {
+//				return err
+//			}
+//			// 更新计数
+//			return r.UpdateCounts(ctx, interaction.TopicUID)
+//		})
+//	}
 func (r *topicRepository) AddInteraction(ctx context.Context, interaction *model.TopicInteraction) error {
+	// 首先在事务外检查是否存在交互
+	var existingInteraction model.TopicInteraction
+	err := r.db.WithContext(ctx).
+		Where("topic_uid = ? AND user_uid = ? AND interaction_type = ?",
+			interaction.TopicUID, interaction.UserUID, interaction.InteractionType).
+		First(&existingInteraction).Error
+
+	// 开始事务
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(interaction).Error; err != nil {
-			return err
+		if err == gorm.ErrRecordNotFound {
+			// 不存在则创建
+			if err := tx.Create(interaction).Error; err != nil {
+				return fmt.Errorf("failed to create interaction: %v", err)
+			}
+		} else if err == nil {
+			// 存在则更新状态
+			existingInteraction.InteractionStatus = interaction.InteractionStatus
+			if err := tx.Save(&existingInteraction).Error; err != nil {
+				return fmt.Errorf("failed to update interaction: %v", err)
+			}
+		} else {
+			return fmt.Errorf("failed to check interaction: %v", err)
 		}
-		// 更新计数
-		return r.UpdateCounts(ctx, interaction.TopicUID)
+
+		// 使用单个 SQL 更新点赞数
+		updateSQL := `
+            UPDATE topics t 
+            SET likes_count = (
+                SELECT COUNT(*) 
+                FROM topic_interactions ti 
+                WHERE ti.topic_uid = ? 
+                AND ti.interaction_type = 'like' 
+                AND ti.interaction_status = 'active'
+            )
+            WHERE t.uid = ?
+        `
+		if err := tx.Exec(updateSQL, interaction.TopicUID, interaction.TopicUID).Error; err != nil {
+			return fmt.Errorf("failed to update like count: %v", err)
+		}
+
+		return nil
 	})
 }
 

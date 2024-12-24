@@ -50,7 +50,7 @@ type TopicRepository interface {
 	// 图片相关
 	AddImages(ctx context.Context, topicUID string, images []*model.TopicImage) error
 	GetImages(ctx context.Context, topicUID string) ([]*model.TopicImage, error)
-
+	DeleteTopicImages(ctx context.Context, topicUID string, imageUIDs []string) error
 	// 标签相关
 	AddTags(ctx context.Context, topicUID string, tagUIDs []string) error
 	RemoveTags(ctx context.Context, topicUID string, tagUIDs []string) error
@@ -76,12 +76,13 @@ type TopicRepository interface {
 
 // ChatRepository 聊天仓储接口
 type ChatRepository interface {
+
 	// 聊天室操作
 	CreateRoom(ctx context.Context, room *model.ChatRoom) error
 	UpdateRoom(ctx context.Context, room *model.ChatRoom) error
 	GetRoomByUID(ctx context.Context, uid string) (*model.ChatRoom, error)
 	ListUserRooms(ctx context.Context, userUID string, offset, limit int) ([]*model.ChatRoom, int64, error)
-
+	FindPrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error)
 	// 成员操作
 	AddMember(ctx context.Context, member *model.ChatRoomMember) error
 	RemoveMember(ctx context.Context, roomUID, userUID string) error
@@ -109,7 +110,7 @@ type RelationshipRepository interface {
 	Create(ctx context.Context, relationship *model.UserRelationship) error
 	Update(ctx context.Context, relationship *model.UserRelationship) error
 	Delete(ctx context.Context, followerUID, followingUID string) error
-
+	AcceptFollow(ctx context.Context, relationship *model.UserRelationship) error
 	// 查询操作
 	GetRelationship(ctx context.Context, followerUID, followingUID string) (*model.UserRelationship, error)
 	GetFollowers(ctx context.Context, userUID string, status string, offset, limit int) ([]*model.UserRelationship, int64, error)

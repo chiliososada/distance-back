@@ -128,7 +128,7 @@ CREATE TABLE user_relationships (
     uid VARCHAR(36) NOT NULL DEFAULT (UUID()) COMMENT '关系UUID',
     follower_uid VARCHAR(36) NOT NULL COMMENT '关注人UUID',
     following_uid VARCHAR(36) NOT NULL COMMENT '被关注人UUID',
-    status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending' COMMENT '关系状态：pending-等待确认, accepted-已确认, blocked-已屏蔽',
+    status ENUM('pending', 'accepted', 'rejected', 'blocked') DEFAULT 'pending' COMMENT '关系状态：pending-等待确认, accepted-已确认, rejected-已拒绝, rejected-已拉黑',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '关系创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '关系更新时间',
     accepted_at TIMESTAMP NULL DEFAULT NULL COMMENT '关系确认时间',
@@ -212,6 +212,7 @@ CREATE TABLE topic_interactions (
     user_uid VARCHAR(36) NOT NULL COMMENT '用户UUID',
     interaction_type ENUM('like', 'favorite', 'share') NOT NULL COMMENT '互动类型',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '互动时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     interaction_status ENUM('active', 'cancelled') DEFAULT 'active' COMMENT '互动状态',
     UNIQUE KEY uk_uid (uid),
     FOREIGN KEY (topic_uid) REFERENCES topics(uid),
@@ -226,13 +227,27 @@ CREATE TABLE chat_rooms (
     uid VARCHAR(36) NOT NULL DEFAULT (UUID()) COMMENT '聊天室UUID',
     name VARCHAR(100) NOT NULL COMMENT '聊天室名称',
     type ENUM('individual', 'group', 'merchant', 'official') NOT NULL COMMENT '聊天室类型',
-    topic_uid VARCHAR(36) COMMENT '关联话题UUID',
+    topic_uid VARCHAR(36) NULL COMMENT '关联话题UUID',    -- 只设置为可以为 NULL
+    avatar_url VARCHAR(255) COMMENT '聊天室头像URL',
+    announcement TEXT COMMENT '聊天室公告',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_uid (uid)
+    -- 去掉 FOREIGN KEY 约束
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '聊天室表';
+
+CREATE TABLE chat_rooms (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT COMMENT '聊天室ID',
+    uid VARCHAR(36) NOT NULL DEFAULT (UUID()) COMMENT '聊天室UUID',
+    name VARCHAR(100) NOT NULL COMMENT '聊天室名称',
+    type ENUM('individual', 'group', 'merchant', 'official') NOT NULL COMMENT '聊天室类型',
+    topic_uid VARCHAR(36) NULL COMMENT '关联话题UUID',
     avatar_url VARCHAR(255) COMMENT '聊天室头像URL',
     announcement TEXT COMMENT '聊天室公告',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_uid (uid),
-    FOREIGN KEY (topic_uid) REFERENCES topics(uid)
+    FOREIGN KEY (topic_uid) REFERENCES topics(uid) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT '聊天室表';
 
 -- Chat room members table
@@ -244,8 +259,10 @@ CREATE TABLE chat_room_members (
     role ENUM('owner', 'admin', 'member') DEFAULT 'member' COMMENT '成员角色',
     nickname VARCHAR(50) COMMENT '成员在聊天室中的昵称',
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
-    last_read_message_id BIGINT UNSIGNED DEFAULT 0 COMMENT '最后读取的消息ID',
+    last_read_message_id VARCHAR(36) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' COMMENT '最后读取的消息UUID',
     is_muted BOOLEAN DEFAULT FALSE COMMENT '是否被静音',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_uid (uid),
     FOREIGN KEY (chat_room_uid) REFERENCES chat_rooms(uid),
     FOREIGN KEY (user_uid) REFERENCES users(uid),

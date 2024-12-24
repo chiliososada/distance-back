@@ -85,7 +85,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 			// 关注相关
 			relationship.GET("/:id", h.CheckRelationship)    // 检查与用户的关系状态
 			relationship.POST("/:id/follow", h.Follow)       // 关注用户
-			relationship.DELETE("/:id/follow", h.Unfollow)   // 取消关注
+			relationship.POST("/:id/unfollow", h.Unfollow)   // 取消关注
 			relationship.POST("/:id/accept", h.AcceptFollow) // 接受关注请求
 			relationship.POST("/:id/reject", h.RejectFollow) // 拒绝关注请求
 

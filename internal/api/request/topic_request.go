@@ -18,9 +18,13 @@ type CreateTopicRequest struct {
 
 // UpdateTopicRequest 更新话题请求
 type UpdateTopicRequest struct {
-	Title     string    `json:"title" binding:"required,min=1,max=255"`
-	Content   string    `json:"content" binding:"required,min=1"`
-	ExpiresAt time.Time `json:"expires_at" binding:"required"`
+	Title     string                  `json:"title" binding:"required,min=1,max=255"`
+	Content   string                  `json:"content" binding:"required,min=1"`
+	ExpiresAt time.Time               `json:"expires_at" binding:"omitempty"`
+	Tags      []string                `json:"tags,omitempty" binding:"omitempty,dive,min=1,max=50"`
+	Images    []*multipart.FileHeader `form:"images" binding:"omitempty,dive"`
+	// 可以添加删除图片的字段
+	RemoveImageUIDs []string `json:"remove_image_uids,omitempty" binding:"omitempty,dive,uuid"`
 }
 
 // TopicListRequest 话题列表请求

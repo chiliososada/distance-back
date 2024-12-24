@@ -46,15 +46,6 @@ func (s *RelationshipService) Follow(ctx context.Context, followerUID, following
 		return ErrUserNotFound
 	}
 
-	// 检查是否被对方拉黑
-	isBlocked, err := s.IsBlocked(ctx, followingUID, followerUID)
-	if err != nil {
-		return err
-	}
-	if isBlocked {
-		return ErrBlockedUser
-	}
-
 	// 检查目标用户的隐私设置
 	var status string
 	if following.PrivacyLevel == "public" {
@@ -82,17 +73,14 @@ func (s *RelationshipService) Follow(ctx context.Context, followerUID, following
 	return nil
 }
 
-// Unfollow 取消关注
+// Unfollow 取消关注(accepted_at 为空)
 func (s *RelationshipService) Unfollow(ctx context.Context, followerUID, followingUID string) error {
 	if followerUID == followingUID {
 		return ErrSelfRelation
 	}
 
-	if err := s.relationRepo.Delete(ctx, followerUID, followingUID); err != nil {
-		return fmt.Errorf("failed to delete relationship: %w", err)
-	}
-
-	return nil
+	// 直接更新状态为rejected
+	return s.relationRepo.UpdateStatus(ctx, followerUID, followingUID, "rejected")
 }
 
 // AcceptFollow 接受关注请求
@@ -109,24 +97,24 @@ func (s *RelationshipService) AcceptFollow(ctx context.Context, userUID, followe
 		return ErrInvalidRelationType
 	}
 
-	// 更新关系状态
 	now := time.Now()
 	relationship.Status = "accepted"
 	relationship.AcceptedAt = &now
 
-	if err := s.relationRepo.Update(ctx, relationship); err != nil {
-		return fmt.Errorf("failed to update relationship: %w", err)
+	// 调用repository层的AcceptFollow方法
+	if err := s.relationRepo.AcceptFollow(ctx, relationship); err != nil {
+		return fmt.Errorf("failed to accept follow: %w", err)
 	}
 
-	// 处理互相关注的情况
+	// 成功后处理互相关注的情况
 	s.handleMutualFollow(ctx, followerUID, userUID)
 
 	return nil
 }
 
-// RejectFollow 拒绝关注请求
+// RejectFollow 拒绝关注请求(accepted_at 非空)
 func (s *RelationshipService) RejectFollow(ctx context.Context, userUID, followerUID string) error {
-	return s.relationRepo.Delete(ctx, followerUID, userUID)
+	return s.relationRepo.UpdateStatus(ctx, followerUID, userUID, "rejected")
 }
 
 // GetFollowers 获取粉丝列表
@@ -141,17 +129,15 @@ func (s *RelationshipService) GetFollowings(ctx context.Context, userUID string,
 
 // GetFriends 获取好友列表（互相关注）
 func (s *RelationshipService) GetFriends(ctx context.Context, userUID string, page, pageSize int) ([]*model.User, int64, error) {
-	followings, _, err := s.relationRepo.GetFollowings(ctx, userUID, "accepted", 0, 1000)
+	followings, total, err := s.relationRepo.GetFollowings(ctx, userUID, "accepted", (page-1)*pageSize, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	var friends []*model.User
-	var total int64
-
 	for _, following := range followings {
 		// 检查是否互相关注
-		isFollowed, err := s.relationRepo.ExistsRelationship(ctx, following.FollowingUID, userUID)
+		isFollowed, err := s.IsFriend(ctx, following.FollowingUID, userUID)
 		if err != nil {
 			continue
 		}
@@ -161,21 +147,10 @@ func (s *RelationshipService) GetFriends(ctx context.Context, userUID string, pa
 				continue
 			}
 			friends = append(friends, user)
-			total++
 		}
 	}
 
-	// 分页
-	start := (page - 1) * pageSize
-	end := start + pageSize
-	if start >= len(friends) {
-		return []*model.User{}, total, nil
-	}
-	if end > len(friends) {
-		end = len(friends)
-	}
-
-	return friends[start:end], total, nil
+	return friends, total, nil
 }
 
 // IsFollowing 检查是否正在关注
@@ -184,7 +159,7 @@ func (s *RelationshipService) IsFollowing(ctx context.Context, followerUID, foll
 	if err != nil {
 		return false, err
 	}
-	return relationship != nil && relationship.Status == "accepted", nil
+	return relationship != nil && relationship.Status == "pending", nil
 }
 
 // IsFollowed 检查是否被关注
@@ -197,46 +172,77 @@ func (s *RelationshipService) IsFollowed(ctx context.Context, userUID, followerU
 }
 
 // IsBlocked 检查是否被拉黑
-func (s *RelationshipService) IsBlocked(ctx context.Context, blockerUID, userUID string) (bool, error) {
+func (s *RelationshipService) IsRejected(ctx context.Context, blockerUID, userUID string) (bool, error) {
 	relationship, err := s.relationRepo.GetRelationship(ctx, blockerUID, userUID)
 	if err != nil {
 		return false, err
 	}
-	return relationship != nil && relationship.Status == "blocked", nil
+	return relationship != nil && relationship.Status == "rejected", nil
 }
 
 // IsFriend 检查是否是好友（互相关注）
 func (s *RelationshipService) IsFriend(ctx context.Context, userUID1, userUID2 string) (bool, error) {
-	isFollowing, err := s.IsFollowing(ctx, userUID1, userUID2)
-	if err != nil {
+	// 获取双向关系
+	rel1, err := s.relationRepo.GetRelationship(ctx, userUID1, userUID2)
+	if err != nil || rel1 == nil || rel1.Status != "accepted" {
 		return false, err
 	}
-	if !isFollowing {
-		return false, nil
+
+	rel2, err := s.relationRepo.GetRelationship(ctx, userUID2, userUID1)
+	if err != nil || rel2 == nil || rel2.Status != "accepted" {
+		return false, err
 	}
 
-	return s.IsFollowing(ctx, userUID2, userUID1)
+	return true, nil
 }
 
 // 处理互相关注（好友）情况
+// handleMutualFollow 处理互相关注（好友）情况
 func (s *RelationshipService) handleMutualFollow(ctx context.Context, userUID1, userUID2 string) {
-	isFriend, err := s.IsFriend(ctx, userUID1, userUID2)
+	// 检查反向关系是否已经是accepted状态
+	reverseRelationship, err := s.relationRepo.GetRelationship(ctx, userUID2, userUID1)
 	if err != nil {
-		logger.Error("failed to check friend status",
+		logger.Error("Failed to get reverse relationship",
 			logger.Any("error", err),
 			logger.String("user1", userUID1),
 			logger.String("user2", userUID2))
 		return
 	}
 
-	if isFriend {
-		// 创建私聊房间
-		_, err := s.chatService.CreatePrivateRoom(ctx, userUID1, userUID2)
+	// 如果反向关系也是accepted，说明是互相关注
+	if reverseRelationship != nil && reverseRelationship.Status == "accepted" {
+		logger.Info("Mutual follow confirmed, creating chat room",
+			logger.String("user1", userUID1),
+			logger.String("user2", userUID2))
+
+		// 检查是否已存在聊天室
+		existingRoom, err := s.chatService.findPrivateRoom(ctx, userUID1, userUID2)
 		if err != nil {
-			logger.Error("failed to create private room",
+			logger.Error("Failed to check existing chat room",
 				logger.Any("error", err),
 				logger.String("user1", userUID1),
 				logger.String("user2", userUID2))
+			return
 		}
+
+		if existingRoom != nil {
+			logger.Info("Chat room already exists",
+				logger.String("room_uid", existingRoom.UID))
+			return
+		}
+
+		// 创建私聊房间
+		_, err = s.chatService.CreatePrivateRoom(ctx, userUID1, userUID2)
+		if err != nil {
+			logger.Error("Failed to create private room",
+				logger.Any("error", err),
+				logger.String("user1", userUID1),
+				logger.String("user2", userUID2))
+			return
+		}
+
+		logger.Info("Successfully created private room",
+			logger.String("user1", userUID1),
+			logger.String("user2", userUID2))
 	}
 }
