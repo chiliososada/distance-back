@@ -9,7 +9,7 @@ type FollowRequest struct {
 type GetRelationshipsRequest struct {
 	PaginationQuery
 	SortQuery
-	Status string `form:"status" binding:"omitempty,oneof=pending accepted blocked"` // 关系状态
+	Status string `form:"status" binding:"omitempty,oneof=pending accepted rejected"` // 关系状态
 }
 
 // BlockUserRequest 拉黑用户请求

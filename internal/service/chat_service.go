@@ -17,9 +17,10 @@ import (
 type (
 	// GroupCreateOptions 创建群聊参数
 	GroupCreateOptions struct {
-		Name           string
-		Announcement   string
-		InitialMembers []string // 改为使用 UID
+		Name            string
+		TopicUID        string // 添加话题ID
+		Announcement    string
+		CreatorNickname string // 添加创建者昵称
 	}
 	// MessageCreateOptions 发送消息参数
 	MessageCreateOptions struct {
@@ -161,18 +162,13 @@ func (s *ChatService) CreatePrivateRoom(ctx context.Context, userUID1, userUID2 
 
 // CreateGroupRoom 创建群聊房间
 func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorUID string, opts GroupCreateOptions) (*model.ChatRoom, error) {
-	creator, err := s.userRepo.GetByUID(ctx, creatorUID)
-	if err != nil || creator == nil {
-		return nil, errors.ErrUserNotFound
-	}
-
-	if len(opts.InitialMembers) > s.maxRoomMembers {
-		return nil, fmt.Errorf("number of members exceeds maximum limit of %d", s.maxRoomMembers)
-	}
-
 	room := &model.ChatRoom{
+		BaseModel: model.BaseModel{
+			UID: uuid.New().String(),
+		},
 		Name:         opts.Name,
 		Type:         "group",
+		TopicUID:     opts.TopicUID,
 		Announcement: opts.Announcement,
 	}
 
@@ -180,40 +176,18 @@ func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorUID string, op
 		return nil, fmt.Errorf("failed to create chat room: %w", err)
 	}
 
-	// 添加创建者为群主
+	// 只添加群主
 	creatorMember := &model.ChatRoomMember{
+		BaseModel: model.BaseModel{
+			UID: uuid.New().String(),
+		},
 		ChatRoomUID: room.UID,
 		UserUID:     creatorUID,
 		Role:        "owner",
-		Nickname:    creator.Nickname,
+		Nickname:    opts.CreatorNickname,
 	}
 	if err := s.chatRepo.AddMember(ctx, creatorMember); err != nil {
 		return nil, fmt.Errorf("failed to add creator as member: %w", err)
-	}
-
-	// 添加初始成员
-	for _, memberUID := range opts.InitialMembers {
-		if memberUID == creatorUID {
-			continue
-		}
-
-		member, err := s.userRepo.GetByUID(ctx, memberUID)
-		if err != nil || member == nil {
-			continue
-		}
-
-		roomMember := &model.ChatRoomMember{
-			ChatRoomUID: room.UID,
-			UserUID:     memberUID,
-			Role:        "member",
-			Nickname:    member.Nickname,
-		}
-		if err := s.chatRepo.AddMember(ctx, roomMember); err != nil {
-			logger.Error("failed to add member to group",
-				logger.String("room_uid", room.UID),
-				logger.String("user_uid", memberUID),
-				logger.Any("error", err))
-		}
 	}
 
 	return room, nil

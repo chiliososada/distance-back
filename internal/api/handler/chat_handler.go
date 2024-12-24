@@ -83,11 +83,17 @@ func (h *Handler) CreateGroupRoom(c *gin.Context) {
 	// 	Error(c, errors.ErrRoomMemberLimit)
 	// 	return
 	// }
-
+	// 从当前上下文获取用户信息
+	user, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
+	if err != nil {
+		Error(c, err)
+		return
+	}
 	opts := service.GroupCreateOptions{
-		Name:           req.Name,
-		Announcement:   req.Announcement,
-		InitialMembers: req.InitialMembers,
+		Name:            req.Name,
+		TopicUID:        req.TopicUID,
+		Announcement:    req.Announcement,
+		CreatorNickname: user.Nickname, // 传递创建者昵称
 	}
 
 	room, err := h.chatService.CreateGroupRoom(c.Request.Context(), userUID, opts)
