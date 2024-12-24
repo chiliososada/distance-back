@@ -2,10 +2,10 @@ package request
 
 // CreateGroupRequest 创建群聊请求
 type CreateGroupRequest struct {
-	Name           string   `json:"name" binding:"required,min=1,max=100"`
-	TopicUID       string   `json:"topic_uid" binding:"required,uuid"`
-	InitialMembers []string `json:"initial_members" binding:"required,min=1,dive,uuid"`
-	Announcement   string   `json:"announcement" binding:"max=500"`
+	Name     string `json:"name" binding:"required,min=1,max=100"`
+	TopicUID string `json:"topic_uid" binding:"required,uuid"`
+	// InitialMembers []string `json:"initial_members" binding:"required,min=1,dive,uuid"`
+	Announcement string `json:"announcement" binding:"max=500"`
 }
 
 // SendMessageRequest 发送消息请求
