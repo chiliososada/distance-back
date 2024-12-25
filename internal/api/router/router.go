@@ -1,12 +1,9 @@
 package router
 
 import (
-	"time"
-
 	"github.com/chiliososada/distance-back/internal/api/handler"
 	"github.com/chiliososada/distance-back/internal/middleware"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,14 +24,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	//r.Use(middleware.RateLimit(100, 10)) // 限制每IP每秒请求数
 
 	// CORS 配置
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	r.Use(middleware.CORS())
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
@@ -46,14 +36,11 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	// API 版本组
 	v1 := r.Group("/api/v1")
 
+	v1.POST("/login", h.LoginUser)
 	// 认证相关路由
-	auth := v1.Group("/auth")
-	{
-		auth.POST("/register", middleware.AuthRequired(), h.RegisterUser)
-	}
 
 	// 需要认证的路由组
-	authenticated := v1.Group("")
+	authenticated := v1.Group("/auth")
 	authenticated.Use(middleware.AuthRequired())
 	{
 

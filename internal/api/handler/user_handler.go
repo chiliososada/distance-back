@@ -1,17 +1,87 @@
 package handler
 
 import (
+	"fmt"
+	"math"
 	"strings"
 	"time"
+
+	"crypto/rand"
+
+	"encoding/base64"
 
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/pkg/auth"
+	"github.com/chiliososada/distance-back/pkg/cache"
 	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
+
+func generateCSRFToken(cookie string, expiresIn time.Duration) (string, error) {
+
+	var token string
+	if err := cache.Get(cookie, &token); err != nil {
+		return "", err
+	}
+
+	if token != "" {
+		//update expiration
+		if err := cache.Expire(cookie, expiresIn); err != nil {
+			return "", err
+		}
+		logger.Info("csrf token exists: ", logger.String("token", token))
+		return token, nil
+	}
+
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	encoded := base64.StdEncoding.EncodeToString(b)
+	return encoded, nil
+
+}
+
+func (h *Handler) LoginUser(c *gin.Context) {
+	var req request.LoginRequest
+	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+		Error(c, errors.ErrValidation)
+		return
+	}
+
+	expiresIn := time.Hour * 24 * 5
+
+	cookie, err := auth.SessionCookie(c.Request.Context(), req.IdToken, expiresIn)
+	if err != nil {
+		Error(c, errors.ErrSessionFailed)
+		return
+	}
+
+	csrfToken, err := generateCSRFToken(cookie, expiresIn)
+	if err != nil {
+		Error(c, errors.ErrOperation)
+		return
+
+	}
+
+	if err := cache.Set(cookie, csrfToken, expiresIn); err != nil {
+		Error(c, errors.ErrOperation)
+		return
+	}
+
+	//c.SetCookie("Authorization", cookie, int(math.Floor(expiresIn.Seconds())), "/", "192.168.0.213", false, true)
+	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.213; HttpOnly; SameSite=None", cookie, int(math.Floor(expiresIn.Seconds()))))
+
+	logger.Info("Create session: ", logger.String("session", cookie), logger.String("csrf", csrfToken))
+
+	Success(c, response.LoginInfo{
+		CsrfToken: csrfToken,
+	})
+
+}
 
 // RegisterUser 处理用户注册
 // @Summary 用户注册或更新

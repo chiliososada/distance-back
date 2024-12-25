@@ -6,50 +6,22 @@ import (
 	"strings"
 
 	"github.com/chiliososada/distance-back/pkg/auth"
-
+	"github.com/chiliososada/distance-back/pkg/errors"
+	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 
 // AuthRequired 认证中间件
 func AuthRequired() gin.HandlerFunc {
-	print(123)
 	return func(c *gin.Context) {
-		// 获取 Authorization header
-		authHeader := c.GetHeader("Authorization")
-
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "authorization header is required",
-			})
-			return
-		}
-
-		// 解析 token
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "invalid authorization header format",
-			})
-			return
-		}
-
-		token := parts[1]
-
-		// 验证 Firebase token
-		firebaseToken, err := auth.VerifyIDToken(context.Background(), token)
+		session, err := c.Cookie("Authorization")
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":    401,
-				"message": "invalid token",
-			})
-			return
+			logger.Error("session err: ", logger.Err(err))
+			c.AbortWithError(http.StatusUnauthorized, errors.ErrUnauthorized)
 		}
 
-		// 将用户信息存储在上下文中
-		c.Set("firebase_user", firebaseToken)
-		c.Set("user_id", firebaseToken.UID)
+		logger.Info("session ", logger.String("session", session))
+
 		c.Next()
 	}
 }

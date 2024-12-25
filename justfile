@@ -26,6 +26,9 @@ install:
 run: install
     $(pwd)/install/app
 
+redisui:
+    docker run -d --name  redisinsight --network=distance -p 52344:5540 redis/redisinsight:latest
+
 
 push message:
     git add --all

@@ -59,6 +59,10 @@ func main() {
 		MaxAge:      30, // days
 	})
 
+	if env == "production" {
+		logger.Warn("生产环境下请检查session cookie设定")
+	}
+
 	// 3. 初始化数据库
 	db, err := database.InitMySQL(&cfg.MySQL)
 	if err != nil {

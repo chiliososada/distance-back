@@ -53,6 +53,10 @@ type Relationship struct {
 	IsRejected  bool `json:"is_rejected"`
 }
 
+type LoginInfo struct {
+	CsrfToken string `json:"csrf_token"`
+}
+
 // 使用泛型定义分页响应类型
 type UserListResponse = PaginatedResponse[*UserInfo]
 type UserBriefListResponse = PaginatedResponse[*UserBrief]

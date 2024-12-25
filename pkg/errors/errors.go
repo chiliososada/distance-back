@@ -37,6 +37,7 @@ const (
 	CodeDownload        = 10009 // 下载失败
 	CodeOperation       = 10010 // 操作失败
 	CodeOperationFailed = 10011 // 操作执行失败
+	CodeCache           = 10012 // Redis操作失败
 
 	// 用户相关错误 (2xxxx)
 	CodeUserNotFound      = 20001 // 用户不存在
@@ -50,6 +51,7 @@ const (
 	CodeDeviceNotFound    = 20009 // 设备不存在
 	CodeDeviceExists      = 20010 // 设备已存在
 	CodeInvalidFile       = 20011 // 无效文件
+	CodeSessionFailed     = 20012 // 创建用户Session失败
 
 	// 社交关系错误 (3xxxx)
 	CodeRelationExists   = 30001 // 关系已存在
@@ -142,6 +144,7 @@ var (
 	ErrDuplicate      = New(CodeDuplicate, "资源已存在")
 	ErrThirdParty     = New(CodeThirdParty, "第三方服务错误")
 	ErrOperation      = New(CodeOperation, "操作失败")
+	ErrCache          = New(CodeCache, "Redis操作失败")
 
 	// 用户相关错误
 	ErrUserExists      = New(CodeUserExists, "用户已存在")
@@ -152,6 +155,7 @@ var (
 	ErrUnauthorized    = New(CodeAuthentication, "未认证").WithStatus(http.StatusUnauthorized)
 	ErrForbidden       = New(CodeAuthorization, "无权限访问").WithStatus(http.StatusForbidden)
 	ErrInvalidRequest  = New(CodeValidation, "无效请求").WithStatus(http.StatusBadRequest)
+	ErrSessionFailed   = New(CodeSessionFailed, "创建用户Session失败")
 
 	// 用户资料相关错误
 	ErrInvalidProfile    = New(CodeProfileIncomplete, "无效的用户资料").WithStatus(http.StatusBadRequest)

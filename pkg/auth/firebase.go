@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/chiliososada/distance-back/config"
 	"github.com/chiliososada/distance-back/pkg/logger"
@@ -183,4 +184,9 @@ func VerifyIDToken(ctx context.Context, idToken string) (*auth.Token, error) {
 	}
 
 	return token, nil
+}
+
+func SessionCookie(ctx context.Context, idToken string, expiresIn time.Duration) (string, error) {
+	return firebaseAuth.SessionCookie(ctx, idToken, expiresIn)
+
 }
