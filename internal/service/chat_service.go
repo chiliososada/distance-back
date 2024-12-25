@@ -644,3 +644,36 @@ func (s *ChatService) getMemberInfo(ctx context.Context, roomUID, userUID string
 func (s *ChatService) findPrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error) {
 	return s.chatRepo.FindPrivateRoom(ctx, userUID1, userUID2)
 }
+
+// JoinRoom 加入群聊
+func (s *ChatService) JoinRoom(ctx context.Context, userUID string, nickname string, roomUID string) error {
+	// 获取聊天室信息
+	room, err := s.GetRoomInfo(ctx, roomUID)
+	if err != nil {
+		return err
+	}
+	if room == nil {
+		return errors.ErrChatRoomNotFound
+	}
+
+	// 验证是否为群聊
+	if room.Type != "group" {
+		return errors.ErrChatRoomNotFound
+	}
+
+	// 检查是否已经是成员
+	if s.isRoomMember(ctx, roomUID, userUID) {
+		return errors.ErrUserExists
+	}
+
+	// 构造成员对象
+	member := &model.ChatRoomMember{
+		ChatRoomUID: roomUID,
+		UserUID:     userUID,
+		Role:        "member",
+		Nickname:    nickname,
+	}
+
+	// 添加成员
+	return s.chatRepo.AddMember(ctx, member)
+}

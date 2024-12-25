@@ -278,6 +278,7 @@ CREATE TABLE messages (
     content_type ENUM('text', 'image', 'file', 'system') DEFAULT 'text' NOT NULL COMMENT '消息类型',
     content TEXT COMMENT '消息内容',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '发送时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_uid (uid),
     FOREIGN KEY (chat_room_uid) REFERENCES chat_rooms(uid),
     FOREIGN KEY (sender_uid) REFERENCES users(uid),

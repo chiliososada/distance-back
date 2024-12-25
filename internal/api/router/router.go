@@ -130,8 +130,8 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 
 			chats.PUT("/:id", h.UpdateRoom)              // 更新聊天室信息
 			chats.PUT("/:id/avatar", h.UpdateRoomAvatar) // 更新聊天室头像
-
-			chats.POST("/:id/leave", h.LeaveRoom) // 离开聊天室
+			chats.POST("/:id/join", h.JoinRoom)          // 自由加入群聊
+			chats.POST("/:id/leave", h.LeaveRoom)        // 离开聊天室
 
 			// 成员管理
 			chats.POST("/:id/members", h.AddMember)                       // 添加成员

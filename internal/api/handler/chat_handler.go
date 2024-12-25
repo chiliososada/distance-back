@@ -822,3 +822,33 @@ func (h *Handler) LeaveRoom(c *gin.Context) {
 
 	Success(c, nil)
 }
+
+// JoinRoom 加入群聊
+func (h *Handler) JoinRoom(c *gin.Context) {
+	userUID := h.GetCurrentUserUID(c)
+	if userUID == "" {
+		Error(c, errors.ErrUnauthorized)
+		return
+	}
+
+	roomUID, err := ParseUUID(c, "id")
+	if err != nil {
+		Error(c, err)
+		return
+	}
+
+	// 获取用户信息
+	user, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
+	if err != nil {
+		Error(c, err)
+		return
+	}
+
+	// 注意这里的参数顺序要和 service 层方法定义的一致
+	if err := h.chatService.JoinRoom(c.Request.Context(), userUID, user.Nickname, roomUID); err != nil {
+		Error(c, err)
+		return
+	}
+
+	Success(c, nil)
+}
