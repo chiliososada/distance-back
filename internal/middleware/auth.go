@@ -1,12 +1,10 @@
 package middleware
 
 import (
-	"context"
+	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/chiliososada/distance-back/pkg/auth"
-	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
@@ -15,43 +13,35 @@ import (
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session, err := c.Cookie("Authorization")
+		fmt.Printf("session: %v\n", session)
 		if err != nil {
-			logger.Error("session err: ", logger.Err(err))
-			c.AbortWithError(http.StatusUnauthorized, errors.ErrUnauthorized)
-		}
-
-		logger.Info("session ", logger.String("session", session))
-
-		c.Next()
-	}
-}
-
-// OptionalAuth 可选认证中间件
-func OptionalAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.Next()
+			fmt.Printf("err: %v\n", err.Error())
+			if err == http.ErrNoCookie {
+				c.AbortWithStatus(http.StatusUnauthorized)
+			} else {
+				logger.Error("Find Authorization Cookie Failed", logger.Err(err))
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.Next()
-			return
-		}
-
-		token := parts[1]
-
-		firebaseToken, err := auth.VerifyIDToken(context.Background(), token)
+		token, err := auth.VeirfySessionCookie(c.Request.Context(), session)
 		if err != nil {
-			c.Next()
+			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
 
-		c.Set("firebase_user", firebaseToken)
-		c.Set("user_id", firebaseToken.UID)
-
-		c.Next()
+		sessionData, err := auth.GetSessionData(token.UID, session)
+		fmt.Printf("session data %v\n", sessionData)
+		if err != nil {
+			fmt.Printf("err: %v\n", err.Error())
+			c.AbortWithError(http.StatusInternalServerError, err)
+		} else if sessionData != nil {
+			auth.SetSessionInContext(c, sessionData)
+			c.Next()
+		} else {
+			c.AbortWithStatus(http.StatusUnauthorized)
+		}
+		return
 	}
 }

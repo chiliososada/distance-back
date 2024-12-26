@@ -58,6 +58,7 @@ func main() {
 		MaxBackups:  60,
 		MaxAge:      30, // days
 	})
+	defer logger.Sync()
 
 	if env == "production" {
 		logger.Warn("生产环境下请检查session cookie设定")
@@ -116,7 +117,7 @@ func main() {
 
 	// 11. 创建HTTP服务器
 	srv := &http.Server{
-		Addr:           fmt.Sprintf(":%d", cfg.App.Port),
+		Addr:           fmt.Sprintf("0.0.0.0:%d", cfg.App.Port),
 		Handler:        r,
 		ReadTimeout:    cfg.App.ReadTimeout,
 		WriteTimeout:   cfg.App.WriteTimeout,
@@ -124,15 +125,18 @@ func main() {
 	}
 
 	// 12. 启动服务器
+
 	go func() {
+
 		logger.Info("Server is starting",
 			logger.String("addr", srv.Addr),
 			logger.String("mode", cfg.App.Mode))
 
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServeTLS("/Users/ziyuanliu/Code/self-signed-cert/local.crt", "/Users/ziyuanliu/Code/self-signed-cert/local.key"); err != nil && err != http.ErrServerClosed {
 			logger.Error("Server failed to start", logger.Any("error", err))
 			os.Exit(1)
 		}
+
 	}()
 
 	// 13. 优雅关闭

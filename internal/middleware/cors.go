@@ -8,11 +8,9 @@ import (
 // CORS 跨域中间件
 func CORS() gin.HandlerFunc {
 	return cors.New(cors.Config{
-		AllowOriginFunc: func(origin string) bool {
-			return true
-		},
+		AllowOrigins:     []string{"https://192.168.0.143:5173", "https://localhost:5173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-CSRF-Token"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-CSRF-Token"},
 		AllowCredentials: true,
 	})
 

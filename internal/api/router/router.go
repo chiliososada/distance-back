@@ -35,7 +35,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 
 	// API 版本组
 	v1 := r.Group("/api/v1")
-
+	v1.GET("/checksession", h.CheckSession)
 	v1.POST("/login", h.LoginUser)
 	// 认证相关路由
 
@@ -57,6 +57,9 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 			// 用户查询
 			users.GET("/search", h.SearchUsers) // 搜索用户
 			users.GET("/:id", h.GetUserProfile) // 获取用户资料
+
+			//signout
+			users.POST("/signout", h.Signout)
 		}
 
 		// 关系相关路由

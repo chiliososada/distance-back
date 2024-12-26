@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -45,10 +46,62 @@ func generateCSRFToken(cookie string, expiresIn time.Duration) (string, error) {
 
 }
 
+func (h *Handler) CheckSession(c *gin.Context) {
+	session, err := c.Cookie("Authorization")
+	fmt.Printf("check session: %v\n", session)
+	if err != nil {
+		if err == http.ErrNoCookie {
+			c.Status(http.StatusUnauthorized)
+		} else {
+			c.Status(http.StatusBadRequest)
+		}
+	} else {
+
+		token, err := auth.VeirfySessionCookie(c.Request.Context(), session)
+		if err != nil {
+			c.Status(http.StatusUnauthorized)
+			return
+		} else {
+
+			sessionData, err := auth.GetSessionData(token.UID, session)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, err)
+			} else if sessionData != nil {
+				//session is avaiable
+				c.JSON(http.StatusOK, sessionData)
+			} else {
+				c.Status(http.StatusUnauthorized)
+			}
+		}
+	}
+	return
+}
+
 func (h *Handler) LoginUser(c *gin.Context) {
 	var req request.LoginRequest
 	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
 		Error(c, errors.ErrValidation)
+		return
+	}
+
+	token, err := auth.VerifyIDToken(c.Request.Context(), req.IdToken)
+	if err != nil {
+		Error(c, errors.ErrAuthentication)
+		return
+	}
+
+	{
+		fmt.Println("checking user...")
+		err := auth.RemoveUserSession(token.UID)
+		if err != nil {
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+	}
+
+	user, err := auth.GetUserByUID(c.Request.Context(), token.UID)
+	if err != nil {
+		Error(c, errors.ErrAuthentication)
 		return
 	}
 
@@ -67,19 +120,63 @@ func (h *Handler) LoginUser(c *gin.Context) {
 
 	}
 
-	if err := cache.Set(cookie, csrfToken, expiresIn); err != nil {
+	loginInfo := response.LoginInfo{
+		CsrfToken:   csrfToken,
+		UID:         user.UID,
+		DisplayName: user.DisplayName,
+		PhotoUrl:    user.PhotoURL,
+		Email:       user.Email,
+	}
+
+	sessionData := auth.SessionData{
+		LoginInfo: loginInfo,
+	}
+
+	if err := auth.SetSessionData(token.UID, cookie, &sessionData, expiresIn); err != nil {
 		Error(c, errors.ErrOperation)
 		return
 	}
 
 	//c.SetCookie("Authorization", cookie, int(math.Floor(expiresIn.Seconds())), "/", "192.168.0.213", false, true)
-	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.213; HttpOnly; SameSite=None", cookie, int(math.Floor(expiresIn.Seconds()))))
+	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(expiresIn.Seconds()))))
 
-	logger.Info("Create session: ", logger.String("session", cookie), logger.String("csrf", csrfToken))
+	logger.Info("Create session: ", logger.String("uid", token.UID), logger.String("session", cookie), logger.Any("loginInfo", loginInfo))
 
-	Success(c, response.LoginInfo{
-		CsrfToken: csrfToken,
-	})
+	c.JSON(http.StatusOK, sessionData)
+
+}
+
+func (h *Handler) Signout(c *gin.Context) {
+	session, err := c.Cookie("Authorization")
+	if err != nil {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+
+	sessionData, exist := auth.GetSessionFromContext(c)
+	if !exist {
+		c.Status(http.StatusUnauthorized)
+		return
+	} else {
+		uid := sessionData.UID
+		fmt.Printf("uid: %v", uid)
+
+		//we first revoke the session
+		if err := auth.RevokeSession(c.Request.Context(), uid); err != nil {
+
+			logger.Error("revoke user session failed", logger.String("uid", uid))
+		}
+
+		if err := auth.RemoveSessionData(uid, session); err != nil {
+
+			c.Status(http.StatusInternalServerError)
+			return
+		}
+
+		c.Status(http.StatusOK)
+		return
+
+	}
 
 }
 
@@ -195,7 +292,15 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 // @Failure 401 {object} response.Response
 // @Router /api/v1/users/profile [get]
 func (h *Handler) GetProfile(c *gin.Context) {
-	userUID := h.GetCurrentUserUID(c)
+	data, exist := c.Get("session")
+	if !exist {
+		fmt.Printf("not exist\n")
+		Error(c, errors.ErrUnauthorized)
+		return
+	}
+
+	session := data.(*auth.SessionData)
+	userUID := session.UID
 	if userUID == "" {
 		Error(c, errors.ErrUnauthorized)
 		return

@@ -139,6 +139,24 @@ func HDel(key string, fields ...string) error {
 	return RedisClient.HDel(Ctx, key, fields...).Err()
 }
 
+func Scan(prefix string) ([]string, error) {
+	var cursor uint64
+	var keys []string
+	for {
+		found, cursor, err := RedisClient.Scan(Ctx, cursor, prefix, 10).Result()
+		if err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, found...)
+		if cursor == 0 {
+			break
+		}
+
+	}
+	return keys, nil
+}
+
 // Lock 分布式锁
 type Lock struct {
 	key        string

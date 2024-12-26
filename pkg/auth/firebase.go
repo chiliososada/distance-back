@@ -188,5 +188,12 @@ func VerifyIDToken(ctx context.Context, idToken string) (*auth.Token, error) {
 
 func SessionCookie(ctx context.Context, idToken string, expiresIn time.Duration) (string, error) {
 	return firebaseAuth.SessionCookie(ctx, idToken, expiresIn)
+}
 
+func VeirfySessionCookie(ctx context.Context, session string) (*auth.Token, error) {
+	return firebaseAuth.VerifySessionCookie(ctx, session)
+}
+
+func RevokeSession(ctx context.Context, uid string) error {
+	return firebaseAuth.RevokeRefreshTokens(ctx, uid)
 }

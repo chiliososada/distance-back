@@ -2,7 +2,6 @@ package request
 
 type LoginRequest struct {
 	IdToken string `json:"id_token" binding:"required"`
-	//CsrfToken string `json:"csrf" binding:"required"`
 }
 
 // RegisterRequest 用户注册请求

@@ -54,7 +54,11 @@ type Relationship struct {
 }
 
 type LoginInfo struct {
-	CsrfToken string `json:"csrf_token"`
+	CsrfToken   string `json:"csrf_token"`
+	UID         string `json:"uid"`
+	DisplayName string `json:"display_name"`
+	PhotoUrl    string `json:"photo_url"`
+	Email       string `json:"email"`
 }
 
 // 使用泛型定义分页响应类型

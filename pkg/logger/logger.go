@@ -138,3 +138,7 @@ func Error(msg string, fields ...zap.Field) {
 func Fatal(msg string, fields ...zap.Field) {
 	Log.Fatal(msg, fields...)
 }
+
+func Sync() {
+	Log.Sync()
+}
