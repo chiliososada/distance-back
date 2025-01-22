@@ -102,6 +102,9 @@ type ChatRepository interface {
 	PinRoom(ctx context.Context, userUID, roomUID string) error
 	UnpinRoom(ctx context.Context, userUID, roomUID string) error
 	GetPinnedRooms(ctx context.Context, userUID string) ([]*model.ChatRoom, error)
+
+	// 删除操作
+	SoftDeleteTopicAndRoom(ctx context.Context, topicUID, roomUID string) error
 }
 
 // RelationshipRepository 关系仓储接口

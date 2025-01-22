@@ -17,9 +17,10 @@ import (
 type (
 	// GroupCreateOptions 创建群聊参数
 	GroupCreateOptions struct {
-		Name           string
-		Announcement   string
-		InitialMembers []string // 改为使用 UID
+		Name            string
+		TopicUID        string // 添加话题ID
+		Announcement    string
+		CreatorNickname string // 添加创建者昵称
 	}
 	// MessageCreateOptions 发送消息参数
 	MessageCreateOptions struct {
@@ -161,18 +162,13 @@ func (s *ChatService) CreatePrivateRoom(ctx context.Context, userUID1, userUID2 
 
 // CreateGroupRoom 创建群聊房间
 func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorUID string, opts GroupCreateOptions) (*model.ChatRoom, error) {
-	creator, err := s.userRepo.GetByUID(ctx, creatorUID)
-	if err != nil || creator == nil {
-		return nil, errors.ErrUserNotFound
-	}
-
-	if len(opts.InitialMembers) > s.maxRoomMembers {
-		return nil, fmt.Errorf("number of members exceeds maximum limit of %d", s.maxRoomMembers)
-	}
-
 	room := &model.ChatRoom{
+		BaseModel: model.BaseModel{
+			UID: uuid.New().String(),
+		},
 		Name:         opts.Name,
 		Type:         "group",
+		TopicUID:     opts.TopicUID,
 		Announcement: opts.Announcement,
 	}
 
@@ -180,40 +176,18 @@ func (s *ChatService) CreateGroupRoom(ctx context.Context, creatorUID string, op
 		return nil, fmt.Errorf("failed to create chat room: %w", err)
 	}
 
-	// 添加创建者为群主
+	// 只添加群主
 	creatorMember := &model.ChatRoomMember{
+		BaseModel: model.BaseModel{
+			UID: uuid.New().String(),
+		},
 		ChatRoomUID: room.UID,
 		UserUID:     creatorUID,
 		Role:        "owner",
-		Nickname:    creator.Nickname,
+		Nickname:    opts.CreatorNickname,
 	}
 	if err := s.chatRepo.AddMember(ctx, creatorMember); err != nil {
 		return nil, fmt.Errorf("failed to add creator as member: %w", err)
-	}
-
-	// 添加初始成员
-	for _, memberUID := range opts.InitialMembers {
-		if memberUID == creatorUID {
-			continue
-		}
-
-		member, err := s.userRepo.GetByUID(ctx, memberUID)
-		if err != nil || member == nil {
-			continue
-		}
-
-		roomMember := &model.ChatRoomMember{
-			ChatRoomUID: room.UID,
-			UserUID:     memberUID,
-			Role:        "member",
-			Nickname:    member.Nickname,
-		}
-		if err := s.chatRepo.AddMember(ctx, roomMember); err != nil {
-			logger.Error("failed to add member to group",
-				logger.String("room_uid", room.UID),
-				logger.String("user_uid", memberUID),
-				logger.Any("error", err))
-		}
 	}
 
 	return room, nil
@@ -515,19 +489,68 @@ func (s *ChatService) GetUnreadCount(ctx context.Context, userUID string, roomUI
 
 // LeaveRoom 退出聊天室
 func (s *ChatService) LeaveRoom(ctx context.Context, userUID string, roomUID string) error {
-	member, err := s.getMemberInfo(ctx, roomUID, userUID)
+	// 1. 获取聊天室信息
+	room, err := s.chatRepo.GetRoomByUID(ctx, roomUID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get chat room: %w", err)
 	}
-	if member == nil {
+	if room == nil {
+		return errors.ErrChatRoomNotFound
+	}
+
+	// 2. 获取所有成员
+	members, err := s.chatRepo.GetRoomMembers(ctx, roomUID)
+	if err != nil {
+		return fmt.Errorf("failed to get room members: %w", err)
+	}
+
+	// 3. 检查当前用户身份
+	var isOwner bool
+	var currentMember *model.ChatRoomMember
+	for _, member := range members {
+		if member.UserUID == userUID {
+			currentMember = member
+			isOwner = member.Role == "owner"
+			break
+		}
+	}
+
+	if currentMember == nil {
 		return errors.ErrNotChatMember
 	}
 
-	// 群主不能退出群聊
-	if member.Role == "owner" {
-		return errors.New(errors.CodeForbidden, "Owner cannot leave the room")
+	// 4. 如果是群主
+	if isOwner {
+		// 统计除群主外的成员数
+		otherMembers := make([]*model.ChatRoomMember, 0)
+		for _, member := range members {
+			if member.UserUID != userUID {
+				otherMembers = append(otherMembers, member)
+			}
+		}
+
+		// 如果没有其他成员，软删除聊天室和关联的话题
+		if len(otherMembers) == 0 {
+			return s.chatRepo.SoftDeleteTopicAndRoom(ctx, room.TopicUID, room.UID)
+		}
+
+		// 有其他成员，转移群主身份给最早加入的成员
+		newOwner := otherMembers[0] // 按加入时间排序，第一个就是最早的
+		newOwner.Role = "owner"
+
+		if err := s.chatRepo.UpdateMember(ctx, newOwner); err != nil {
+			return fmt.Errorf("failed to update new owner: %w", err)
+		}
+
+		// 移除当前群主
+		if err := s.chatRepo.RemoveMember(ctx, roomUID, userUID); err != nil {
+			return fmt.Errorf("failed to remove owner: %w", err)
+		}
+
+		return nil
 	}
 
+	// 5. 如果是普通成员，软删除成员记录
 	return s.chatRepo.RemoveMember(ctx, roomUID, userUID)
 }
 
@@ -620,4 +643,37 @@ func (s *ChatService) getMemberInfo(ctx context.Context, roomUID, userUID string
 
 func (s *ChatService) findPrivateRoom(ctx context.Context, userUID1, userUID2 string) (*model.ChatRoom, error) {
 	return s.chatRepo.FindPrivateRoom(ctx, userUID1, userUID2)
+}
+
+// JoinRoom 加入群聊
+func (s *ChatService) JoinRoom(ctx context.Context, userUID string, nickname string, roomUID string) error {
+	// 获取聊天室信息
+	room, err := s.GetRoomInfo(ctx, roomUID)
+	if err != nil {
+		return err
+	}
+	if room == nil {
+		return errors.ErrChatRoomNotFound
+	}
+
+	// 验证是否为群聊
+	if room.Type != "group" {
+		return errors.ErrChatRoomNotFound
+	}
+
+	// 检查是否已经是成员
+	if s.isRoomMember(ctx, roomUID, userUID) {
+		return errors.ErrUserExists
+	}
+
+	// 构造成员对象
+	member := &model.ChatRoomMember{
+		ChatRoomUID: roomUID,
+		UserUID:     userUID,
+		Role:        "member",
+		Nickname:    nickname,
+	}
+
+	// 添加成员
+	return s.chatRepo.AddMember(ctx, member)
 }

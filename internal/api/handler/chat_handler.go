@@ -83,11 +83,17 @@ func (h *Handler) CreateGroupRoom(c *gin.Context) {
 	// 	Error(c, errors.ErrRoomMemberLimit)
 	// 	return
 	// }
-
+	// 从当前上下文获取用户信息
+	user, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
+	if err != nil {
+		Error(c, err)
+		return
+	}
 	opts := service.GroupCreateOptions{
-		Name:           req.Name,
-		Announcement:   req.Announcement,
-		InitialMembers: req.InitialMembers,
+		Name:            req.Name,
+		TopicUID:        req.TopicUID,
+		Announcement:    req.Announcement,
+		CreatorNickname: user.Nickname, // 传递创建者昵称
 	}
 
 	room, err := h.chatService.CreateGroupRoom(c.Request.Context(), userUID, opts)
@@ -810,6 +816,36 @@ func (h *Handler) LeaveRoom(c *gin.Context) {
 			logger.Any("error", err),
 			logger.String("room_uid", roomUID),
 			logger.String("user_uid", userUID))
+		Error(c, err)
+		return
+	}
+
+	Success(c, nil)
+}
+
+// JoinRoom 加入群聊
+func (h *Handler) JoinRoom(c *gin.Context) {
+	userUID := h.GetCurrentUserUID(c)
+	if userUID == "" {
+		Error(c, errors.ErrUnauthorized)
+		return
+	}
+
+	roomUID, err := ParseUUID(c, "id")
+	if err != nil {
+		Error(c, err)
+		return
+	}
+
+	// 获取用户信息
+	user, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
+	if err != nil {
+		Error(c, err)
+		return
+	}
+
+	// 注意这里的参数顺序要和 service 层方法定义的一致
+	if err := h.chatService.JoinRoom(c.Request.Context(), userUID, user.Nickname, roomUID); err != nil {
 		Error(c, err)
 		return
 	}

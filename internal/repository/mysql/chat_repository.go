@@ -269,3 +269,57 @@ func (r *chatRepository) GetPinnedRooms(ctx context.Context, userUID string) ([]
 	}
 	return rooms, nil
 }
+
+// SoftDeleteTopicAndRoom 软删除话题并硬删除聊天室
+func (r *chatRepository) SoftDeleteTopicAndRoom(ctx context.Context, topicUID, roomUID string) error {
+	// 开始事务删除
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 软删除话题（更新状态为closed）
+		if err := tx.Model(&model.Topic{}).
+			Where("uid = ?", topicUID).
+			Update("status", "closed").Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return nil
+			}
+			return err
+		}
+
+		// 删除聊天室成员关联
+		if err := tx.Where("chat_room_uid = ?", roomUID).
+			Delete(&model.ChatRoomMember{}).Error; err != nil {
+
+			return err
+		}
+
+		// 删除聊天消息媒体
+		if err := tx.Exec(`DELETE mm FROM message_media mm
+			INNER JOIN messages m ON mm.message_uid = m.uid
+			WHERE m.chat_room_uid = ?`, roomUID).Error; err != nil {
+			return err
+		}
+
+		// 删除聊天消息
+		if err := tx.Where("chat_room_uid = ?", roomUID).
+			Delete(&model.Message{}).Error; err != nil {
+
+			return err
+		}
+
+		// 删除聊天室置顶记录
+		if err := tx.Where("chat_room_uid = ?", roomUID).
+			Delete(&model.PinnedChatRoom{}).Error; err != nil {
+
+			return err
+		}
+
+		// 硬删除聊天室
+		if err := tx.Where("uid = ?", roomUID).
+			Delete(&model.ChatRoom{}).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return nil
+			}
+			return err
+		}
+		return nil
+	})
+}
