@@ -47,16 +47,16 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 		// 用户相关路由
 		users := authenticated.Group("/users")
 		{
-			users.GET("/profile", h.GetProfile)      // 获取个人资料
-			users.PUT("/profile", h.UpdateProfile)   // 更新个人资料
-			users.PUT("/avatar", h.UpdateAvatar)     // 更新头像
-			users.PUT("/location", h.UpdateLocation) // 更新位置
-			users.GET("/nearby", h.GetNearbyUsers)   // 获取附近用户
-			users.POST("/devices", h.RegisterDevice) // 注册设备
+			//users.GET("/profile", h.GetProfile)          // 获取个人资料
+			users.PUT("/updateprofile", h.UpdateProfile) // 更新个人资料
+			//users.PUT("/avatar", h.UpdateAvatar)         // 更新头像
+			//users.PUT("/location", h.UpdateLocation)     // 更新位置
+			//users.GET("/nearby", h.GetNearbyUsers)       // 获取附近用户
+			//users.POST("/devices", h.RegisterDevice)     // 注册设备
 
 			// 用户查询
-			users.GET("/search", h.SearchUsers) // 搜索用户
-			users.GET("/:id", h.GetUserProfile) // 获取用户资料
+			//users.GET("/search", h.SearchUsers) // 搜索用户
+			//users.GET("/:id", h.GetUserProfile) // 获取用户资料
 
 			//signout
 			users.POST("/signout", h.Signout)

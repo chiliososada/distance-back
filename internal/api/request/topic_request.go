@@ -7,13 +7,13 @@ import (
 
 // CreateTopicRequest 创建话题请求
 type CreateTopicRequest struct {
-	Title     string                  `json:"title" binding:"required,min=1,max=255"`
-	Content   string                  `json:"content" binding:"required,min=1"`
-	Images    []*multipart.FileHeader `form:"images" binding:"omitempty,dive"`
-	Tags      []string                `json:"tags" binding:"omitempty,dive,min=1,max=50"`
-	Latitude  float64                 `json:"latitude" binding:"required,min=-90,max=90"`
-	Longitude float64                 `json:"longitude" binding:"required,min=-180,max=180"`
-	ExpiresAt time.Time               `json:"expires_at" binding:"required"`
+	Title     string    `json:"title" binding:"required,min=1,max=255"`
+	Content   string    `json:"content" binding:"omitempty,max=4096"` //must present, can be empty, <=4096
+	Images    []string  `json:"images" binding:"required,dive,min=1"` //must present, can be empty, entries cannot be empty
+	Tags      []string  `json:"tags" binding:"required,dive,min=1,max=50"`
+	Latitude  *float64  `json:"latitude" binding:"omitempty,min=-90,max=90"` //absent means unknown, can be 0
+	Longitude *float64  `json:"longitude" binding:"omitempty,min=-180,max=180"`
+	ExpiresAt time.Time `json:"expires_at" binding:"required"`
 }
 
 // UpdateTopicRequest 更新话题请求

@@ -48,7 +48,6 @@ func generateCSRFToken(cookie string, expiresIn time.Duration) (string, error) {
 
 func (h *Handler) CheckSession(c *gin.Context) {
 	session, err := c.Cookie("Authorization")
-	fmt.Printf("check session: %v\n", session)
 	if err != nil {
 		if err == http.ErrNoCookie {
 			c.Status(http.StatusUnauthorized)
@@ -91,7 +90,6 @@ func (h *Handler) LoginUser(c *gin.Context) {
 	}
 
 	{
-		fmt.Println("checking user...")
 		err := auth.RemoveUserSession(token.UID)
 		if err != nil {
 			c.Status(http.StatusInternalServerError)
@@ -105,15 +103,13 @@ func (h *Handler) LoginUser(c *gin.Context) {
 		return
 	}
 
-	expiresIn := time.Hour * 24 * 5
-
-	cookie, err := auth.SessionCookie(c.Request.Context(), req.IdToken, expiresIn)
+	cookie, err := auth.SessionCookie(c.Request.Context(), req.IdToken, auth.SessionDuration)
 	if err != nil {
 		Error(c, errors.ErrSessionFailed)
 		return
 	}
 
-	csrfToken, err := generateCSRFToken(cookie, expiresIn)
+	csrfToken, err := generateCSRFToken(cookie, auth.SessionDuration)
 	if err != nil {
 		Error(c, errors.ErrOperation)
 		return
@@ -130,24 +126,25 @@ func (h *Handler) LoginUser(c *gin.Context) {
 
 	sessionData := auth.SessionData{
 		LoginInfo: loginInfo,
+		Cookie:    cookie,
 	}
 
-	if err := auth.SetSessionData(token.UID, cookie, &sessionData, expiresIn); err != nil {
+	if err := auth.SetSessionData(token.UID, cookie, &sessionData); err != nil {
 		Error(c, errors.ErrOperation)
 		return
 	}
 
 	//c.SetCookie("Authorization", cookie, int(math.Floor(expiresIn.Seconds())), "/", "192.168.0.213", false, true)
-	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(expiresIn.Seconds()))))
+	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
 
-	logger.Info("Create session: ", logger.String("uid", token.UID), logger.String("session", cookie), logger.Any("loginInfo", loginInfo))
+	//logger.Info("Create session: ", logger.String("uid", token.UID), logger.String("session", cookie), logger.Any("loginInfo", loginInfo))
 
 	c.JSON(http.StatusOK, sessionData)
 
 }
 
 func (h *Handler) Signout(c *gin.Context) {
-	session, err := c.Cookie("Authorization")
+	_, err := c.Cookie("Authorization")
 	if err != nil {
 		c.Status(http.StatusInternalServerError)
 		return
@@ -159,7 +156,7 @@ func (h *Handler) Signout(c *gin.Context) {
 		return
 	} else {
 		uid := sessionData.UID
-		fmt.Printf("uid: %v", uid)
+		//fmt.Printf("uid: %v", uid)
 
 		//we first revoke the session
 		if err := auth.RevokeSession(c.Request.Context(), uid); err != nil {
@@ -167,7 +164,7 @@ func (h *Handler) Signout(c *gin.Context) {
 			logger.Error("revoke user session failed", logger.String("uid", uid))
 		}
 
-		if err := auth.RemoveSessionData(uid, session); err != nil {
+		if err := auth.RemoveUserSession(uid); err != nil {
 
 			c.Status(http.StatusInternalServerError)
 			return
@@ -326,89 +323,40 @@ func (h *Handler) GetProfile(c *gin.Context) {
 // @Failure 400,401 {object} response.Response
 // @Router /api/v1/users/profile [put]
 func (h *Handler) UpdateProfile(c *gin.Context) {
-	userUID := h.GetCurrentUserUID(c)
-	if userUID == "" {
-		Error(c, errors.ErrUnauthorized)
+	sessionData, exist := auth.GetSessionFromContext(c)
+	if !exist {
+		c.Status(http.StatusUnauthorized)
 		return
-	}
+	} else {
 
-	logger.Info("Updating profile for user", logger.String("uid", userUID))
-
-	var req request.UpdateProfileRequest
-	if err := BindAndValidate(c, &req); err != nil {
-		Error(c, err)
-		return
-	}
-
-	// 获取现有用户
-	currentUser, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
-	if err != nil {
-		logger.Error("Failed to get user",
-			logger.String("uid", userUID),
-			logger.Any("error", err))
-		Error(c, err)
-		return
-	}
-	if currentUser == nil {
-		Error(c, errors.ErrUserNotFound)
-		return
-	}
-
-	logger.Info("Found existing user", logger.Any("user", currentUser))
-
-	// 只更新请求中的字段
-	if req.Nickname != "" {
-		currentUser.Nickname = req.Nickname
-	}
-	if req.Bio != "" {
-		currentUser.Bio = req.Bio
-	}
-	if req.Gender != "" {
-		currentUser.Gender = req.Gender
-	}
-	if req.Language != "" {
-		currentUser.Language = req.Language
-	}
-	if req.PrivacyLevel != "" {
-		currentUser.PrivacyLevel = req.PrivacyLevel
-	}
-	if req.LocationSharing != nil {
-		currentUser.LocationSharing = *req.LocationSharing
-	}
-	if req.PhotoEnabled != nil {
-		currentUser.PhotoEnabled = *req.PhotoEnabled
-	}
-	if req.NotificationEnabled != nil {
-		currentUser.NotificationEnabled = *req.NotificationEnabled
-	}
-	if req.BirthDate != "" {
-		birthDate, err := time.Parse("2006-01-02", req.BirthDate)
-		if err != nil {
-			Error(c, errors.New(errors.CodeValidation, "Invalid birth date format"))
+		var req request.UpdateProfileRequest
+		if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+			Error(c, errors.ErrValidation)
 			return
 		}
-		currentUser.BirthDate = &birthDate
-	}
 
-	logger.Info("Updating user with data", logger.Any("updated_user", currentUser))
+		logger.Info("update request", logger.String("avatar", req.AvatarURL), logger.String("nickname", req.Nickname))
 
-	// 更新用户信息
-	if err := h.userService.UpdateProfile(c.Request.Context(), userUID, currentUser); err != nil {
-		logger.Error("Failed to update user",
-			logger.String("uid", userUID),
-			logger.Any("error", err))
-		Error(c, err)
+		updatedSession, userRecord, err := auth.UpdateUserProfile(c, sessionData, &req)
+		if err != nil {
+			Error(c, errors.ErrInvalidProfile)
+			return
+		}
+
+		_, err = h.userService.RegisterOrUpdateUser(c, auth.NewAuthUser(userRecord))
+		if err != nil {
+			Error(c, errors.ErrUserProfileUpdateFailed)
+			return
+		}
+
+		if err := auth.SetSessionData(updatedSession.UID, updatedSession.Cookie, &updatedSession); err != nil {
+			Error(c, errors.ErrOperation)
+			return
+		}
+		c.JSON(http.StatusOK, &updatedSession)
 		return
-	}
 
-	// 获取更新后的信息
-	updatedUser, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
-	if err != nil {
-		Error(c, err)
-		return
 	}
-
-	Success(c, response.ToUserInfo(updatedUser))
 }
 
 // UpdateAvatar 更新用户头像

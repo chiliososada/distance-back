@@ -13,7 +13,6 @@ import (
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session, err := c.Cookie("Authorization")
-		fmt.Printf("session: %v\n", session)
 		if err != nil {
 			fmt.Printf("err: %v\n", err.Error())
 			if err == http.ErrNoCookie {
@@ -32,7 +31,6 @@ func AuthRequired() gin.HandlerFunc {
 		}
 
 		sessionData, err := auth.GetSessionData(token.UID, session)
-		fmt.Printf("session data %v\n", sessionData)
 		if err != nil {
 			fmt.Printf("err: %v\n", err.Error())
 			c.AbortWithError(http.StatusInternalServerError, err)

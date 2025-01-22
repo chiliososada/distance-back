@@ -1,12 +1,13 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/chiliososada/distance-back/pkg/auth"
 	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -26,11 +27,12 @@ import (
 // @Router /api/v1/topics [post]
 func (h *Handler) CreateTopic(c *gin.Context) {
 	// 1. 身份验证
-	userUID := h.GetCurrentUserUID(c)
-	if userUID == "" {
-		Error(c, errors.ErrUnauthorized)
+	sessionData, exist := auth.GetSessionFromContext(c)
+	if !exist {
+		c.Status(http.StatusUnauthorized)
 		return
 	}
+	userUID := sessionData.UID
 
 	// 2. 参数验证
 	var req request.CreateTopicRequest
@@ -41,56 +43,62 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 		Error(c, errors.ErrValidation.WithDetails(err.Error()))
 		return
 	}
-	// 解析标签
-	var tags []string
-	if tagsStr := c.PostForm("Tags"); tagsStr != "" {
-		if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
-			logger.Error("Failed to parse tags JSON",
-				logger.Any("error", err),
-				logger.String("tags_str", tagsStr))
-			Error(c, errors.ErrValidation.WithDetails("Invalid tags format"))
+	fmt.Printf("uid:%v, req: %+v\n", userUID, req)
+	/*
+			// 解析标签
+			var tags []string
+			if tagsStr := c.PostForm("Tags"); tagsStr != "" {
+				if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
+					logger.Error("Failed to parse tags JSON",
+						logger.Any("error", err),
+						logger.String("tags_str", tagsStr))
+					Error(c, errors.ErrValidation.WithDetails("Invalid tags format"))
+					return
+				}
+			}
+
+			// 处理图片
+			var images []*model.File
+			form, err := c.MultipartForm()
+			if err == nil && form != nil && form.File["images"] != nil {
+				files := form.File["images"]
+				images = make([]*model.File, len(files))
+				for i, file := range files {
+					images[i] = &model.File{
+						File: file,
+						Type: "image",
+						Name: file.Filename,
+						Size: uint(file.Size),
+					}
+				}
+			}
+
+		// 构建话题模型
+		topic := &model.Topic{
+			UserUID:           userUID,
+			Title:             req.Title,
+			Content:           req.Content,
+			LocationLatitude:  req.Latitude,
+			LocationLongitude: req.Longitude,
+			ExpiresAt:         req.ExpiresAt,
+		}
+
+		// 创建话题
+		createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, topic, images, tags)
+		if err != nil {
+			logger.Error("Failed to create topic",
+				logger.String("path", c.Request.URL.Path),
+				logger.Any("error", err))
+			Error(c, errors.ErrOperation.WithDetails(err.Error()))
 			return
 		}
-	}
 
-	// 处理图片
-	var images []*model.File
-	form, err := c.MultipartForm()
-	if err == nil && form != nil && form.File["images"] != nil {
-		files := form.File["images"]
-		images = make([]*model.File, len(files))
-		for i, file := range files {
-			images[i] = &model.File{
-				File: file,
-				Type: "image",
-				Name: file.Filename,
-				Size: uint(file.Size),
-			}
-		}
-	}
-
-	// 构建话题模型
-	topic := &model.Topic{
-		UserUID:           userUID,
-		Title:             req.Title,
-		Content:           req.Content,
-		LocationLatitude:  req.Latitude,
-		LocationLongitude: req.Longitude,
-		ExpiresAt:         req.ExpiresAt,
-	}
-
-	// 创建话题
-	createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, topic, images, tags)
-	if err != nil {
-		logger.Error("Failed to create topic",
-			logger.String("path", c.Request.URL.Path),
-			logger.Any("error", err))
-		Error(c, errors.ErrOperation.WithDetails(err.Error()))
-		return
-	}
+	*/
 
 	// 返回响应
-	Success(c, response.ToTopicResponse(createdTopic))
+	//Success(c, response.ToTopicResponse(createdTopic))
+	c.Status(http.StatusOK)
+	return
 }
 
 // UpdateTopic 更新话题

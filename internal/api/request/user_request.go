@@ -36,6 +36,7 @@ type UpdateProfileRequest struct {
 	LocationSharing     *bool  `json:"location_sharing,omitempty"`
 	PhotoEnabled        *bool  `json:"photo_enabled,omitempty"`
 	NotificationEnabled *bool  `json:"notification_enabled,omitempty"`
+	AvatarURL           string `json:"avatar_url,omitempty"`
 }
 
 // UpdateLocationRequest 更新位置请求

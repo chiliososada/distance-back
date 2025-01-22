@@ -12,19 +12,22 @@ import (
 
 type SessionData struct {
 	response.LoginInfo
+	Cookie string
 }
+
+const SessionDuration = time.Hour * 24 * 5
 
 func sessionKey(uid string, session string) string {
 	return fmt.Sprintf("%s:%s", uid, session)
 }
 
 func (data *SessionData) IsValid() bool {
-	fmt.Println("data: %v", *data)
 	return data != nil && data.CsrfToken != ""
 }
 
-func SetSessionData(uid string, session string, value *SessionData, expiresIn time.Duration) error {
-	return cache.Set(sessionKey(uid, session), value, expiresIn)
+func SetSessionData(uid string, session string, value *SessionData) error {
+	fmt.Printf("sess: %v", *value)
+	return cache.Set(sessionKey(uid, session), value, SessionDuration)
 }
 
 func RemoveSessionData(uid string, session string) error {

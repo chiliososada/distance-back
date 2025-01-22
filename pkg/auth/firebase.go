@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/chiliososada/distance-back/config"
+	"github.com/chiliososada/distance-back/internal/api/request"
+	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/pkg/logger"
 
 	firebase "firebase.google.com/go/v4"
@@ -196,4 +198,33 @@ func VeirfySessionCookie(ctx context.Context, session string) (*auth.Token, erro
 
 func RevokeSession(ctx context.Context, uid string) error {
 	return firebaseAuth.RevokeRefreshTokens(ctx, uid)
+}
+
+func UpdateUserProfile(ctx context.Context, current_session *SessionData, request *request.UpdateProfileRequest) (SessionData, *auth.UserRecord, error) {
+	var utu auth.UserToUpdate
+	if request.Nickname != "" {
+		utu = *utu.DisplayName(request.Nickname)
+	}
+
+	if request.AvatarURL != "" {
+		utu = *utu.PhotoURL(request.AvatarURL)
+	}
+
+	if request.Nickname == "" && request.AvatarURL == "" {
+		return *current_session, nil, nil
+	}
+
+	rec, err := firebaseAuth.UpdateUser(ctx, current_session.UID, &utu)
+	updatedSession := SessionData{
+		LoginInfo: response.LoginInfo{
+			CsrfToken:   current_session.CsrfToken,
+			UID:         rec.UID,
+			DisplayName: rec.DisplayName,
+			PhotoUrl:    rec.PhotoURL,
+			Email:       rec.Email,
+		},
+		Cookie: current_session.Cookie,
+	}
+	return updatedSession, rec, err
+
 }
