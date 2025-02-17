@@ -139,6 +139,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 			chats.PUT("/:id/members/:member_id/role", h.UpdateMemberRole) // 更新成员角色
 			chats.GET("/:id/members", h.GetRoomMembers)                   // 获取聊天室成员列表
 			chats.PUT("/:id/members/:member_id", h.UpdateMember)          // 更新成员信息
+
 			// 消息管理
 			chats.POST("/:id/messages", h.SendMessage)                         // 发送消息
 			chats.GET("/:id/messages", h.GetMessages)                          // 获取消息历史
