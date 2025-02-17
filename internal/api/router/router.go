@@ -17,7 +17,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 
 	r.Use(middleware.ErrorHandler()) // 错误处理
 	// r.Use(middleware.RequestLogger(config))    // 日志记录
-	// r.Use(middleware.CORS())                    // 跨域处理
+	r.Use(middleware.CORS()) // 跨域处理
 	// r.Use(middleware.Timeout(10 * time.Second)) // 超时控制
 
 	// API限流

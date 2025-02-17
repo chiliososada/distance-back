@@ -13,3 +13,6 @@ vendor/
 /firebase-credentials.json
 /logs/
 /install
+/dev.key
+/dev_domain.crt
+
