@@ -1,5 +1,7 @@
 package request
 
+import "time"
+
 type LoginRequest struct {
 	IdToken string `json:"id_token" binding:"required"`
 }
@@ -27,16 +29,17 @@ type DeviceInfo struct {
 
 // UpdateProfileRequest 更新资料请求
 type UpdateProfileRequest struct {
-	Nickname            string `json:"nickname" binding:"omitempty,min=2,max=50"`
-	Bio                 string `json:"bio" binding:"omitempty,max=500"`
-	Gender              string `json:"gender" binding:"omitempty,oneof=male female other"`
-	BirthDate           string `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
-	Language            string `json:"language" binding:"omitempty,len=5"` // 如: zh_CN
-	PrivacyLevel        string `json:"privacy_level" binding:"omitempty,oneof=public friends private"`
-	LocationSharing     *bool  `json:"location_sharing,omitempty"`
-	PhotoEnabled        *bool  `json:"photo_enabled,omitempty"`
-	NotificationEnabled *bool  `json:"notification_enabled,omitempty"`
-	AvatarURL           string `json:"avatar_url,omitempty"`
+	Email               *string    `json:"email" binding:"required,min=1"`
+	Nickname            *string    `json:"nickname" binding:"omitempty,min=2,max=50"`
+	Bio                 *string    `json:"bio" binding:"omitempty,max=500"`
+	Gender              *string    `json:"gender" binding:"omitempty,oneof=male female other"`
+	BirthDate           *time.Time `json:"birth_date" binding:"omitempty"`
+	Language            *string    `json:"language" binding:"omitempty,len=5"` // 如: zh_CN
+	PrivacyLevel        *string    `json:"privacy_level" binding:"omitempty,oneof=public friends private"`
+	LocationSharing     *bool      `json:"location_sharing,omitempty"`
+	PhotoEnabled        *bool      `json:"photo_enabled,omitempty"`
+	NotificationEnabled *bool      `json:"notification_enabled,omitempty"`
+	AvatarURL           *string    `json:"avatar_url,omitempty"`
 }
 
 // UpdateLocationRequest 更新位置请求

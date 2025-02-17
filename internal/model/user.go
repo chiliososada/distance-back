@@ -3,6 +3,8 @@ package model
 import (
 	"database/sql"
 	"time"
+
+	"github.com/chiliososada/distance-back/internal/api/request"
 )
 
 // 用户状态常量
@@ -32,23 +34,60 @@ type User struct {
 	Nickname            string     `gorm:"size:50" json:"nickname"`
 	AvatarURL           string     `gorm:"size:255" json:"avatar_url"`
 	BirthDate           *time.Time `json:"birth_date"`
-	Gender              string     `gorm:"type:enum('male','female','other')" json:"gender"`
+	Email               string     `gorm:"size:100;uniqueIndex;not null" json:"email"`
+	Gender              string     `gorm:"type:enum('male','female','others','unknown');default:unknown" json:"gender"`
 	Bio                 string     `gorm:"type:text" json:"bio"`
-	LocationLatitude    float64    `gorm:"type:decimal(10,8)" json:"location_latitude"`
-	LocationLongitude   float64    `gorm:"type:decimal(11,8)" json:"location_longitude"`
+	LocationLatitude    *float64   `gorm:"type:decimal(10,8)" json:"location_latitude,omitempty"`
+	LocationLongitude   *float64   `gorm:"type:decimal(11,8)" json:"location_longitude,omitempty"`
 	Language            string     `gorm:"size:10;default:'zh_CN'" json:"language"`
 	Status              string     `gorm:"type:enum('active','inactive','banned');default:'active'" json:"status"`
 	PrivacyLevel        string     `gorm:"type:enum('public','friends','private');default:'public'" json:"privacy_level"`
 	NotificationEnabled bool       `gorm:"default:true" json:"notification_enabled"`
 	LocationSharing     bool       `gorm:"default:true" json:"location_sharing"`
 	PhotoEnabled        bool       `gorm:"default:true" json:"photo_enabled"`
-	LastActiveAt        *time.Time `json:"last_active_at"`
+	LastActiveAt        *time.Time `json:"last_active_at,omitempty"`
 	UserType            string     `gorm:"type:enum('individual','merchant','official','admin');default:'individual'" json:"user_type"`
 	// 统计字段
 	TopicsCount    int64 `gorm:"-" json:"topics_count"`
 	FollowersCount int64 `gorm:"-" json:"followers_count"`
 	FollowingCount int64 `gorm:"-" json:"following_count"`
 	FriendsCount   int64 `gorm:"-" json:"friends_count"`
+}
+
+func (u *User) UpdateFromRequest(req *request.UpdateProfileRequest) {
+	if req.Email != nil {
+		u.Email = *req.Email
+	}
+	if req.Nickname != nil {
+		u.Nickname = *req.Nickname
+	}
+	if req.Bio != nil {
+		u.Bio = *req.Bio
+	}
+	if req.Gender != nil {
+		u.Gender = *req.Gender
+	}
+	if req.BirthDate != nil {
+		u.BirthDate = *&req.BirthDate
+	}
+	if req.Language != nil {
+		u.Language = *req.Language
+	}
+	if req.PrivacyLevel != nil {
+		u.PrivacyLevel = *req.PrivacyLevel
+	}
+	if req.LocationSharing != nil {
+		u.LocationSharing = *req.LocationSharing
+	}
+	if req.PhotoEnabled != nil {
+		u.PhotoEnabled = *req.PhotoEnabled
+	}
+	if req.NotificationEnabled != nil {
+		u.NotificationEnabled = *req.NotificationEnabled
+	}
+	if req.AvatarURL != nil {
+		u.AvatarURL = *req.AvatarURL
+	}
 }
 
 // UserAuthentication 用户认证模型

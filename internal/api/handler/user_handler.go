@@ -3,8 +3,6 @@ package handler
 import (
 	"fmt"
 	"math"
-	"net/http"
-	"strings"
 	"time"
 
 	"crypto/rand"
@@ -47,37 +45,15 @@ func generateCSRFToken(cookie string, expiresIn time.Duration) (string, error) {
 }
 
 func (h *Handler) CheckSession(c *gin.Context) {
-	session, err := c.Cookie("Authorization")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			c.Status(http.StatusUnauthorized)
-		} else {
-			c.Status(http.StatusBadRequest)
-		}
-	} else {
 
-		token, err := auth.VeirfySessionCookie(c.Request.Context(), session)
-		if err != nil {
-			c.Status(http.StatusUnauthorized)
-			return
-		} else {
+	sessionData := auth.GetSessionFromContext(c)
+	Success(c, sessionData)
 
-			sessionData, err := auth.GetSessionData(token.UID, session)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, err)
-			} else if sessionData != nil {
-				//session is avaiable
-				c.JSON(http.StatusOK, sessionData)
-			} else {
-				c.Status(http.StatusUnauthorized)
-			}
-		}
-	}
-	return
 }
 
 func (h *Handler) LoginUser(c *gin.Context) {
 	var req request.LoginRequest
+	ctx := c.Request.Context()
 	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
 		Error(c, errors.ErrValidation)
 		return
@@ -90,20 +66,21 @@ func (h *Handler) LoginUser(c *gin.Context) {
 	}
 
 	{
-		err := auth.RemoveUserSession(token.UID)
+		err := auth.RemoveUserSession(c, token.UID)
+
 		if err != nil {
-			c.Status(http.StatusInternalServerError)
+			Error(c, errors.ErrCache)
 			return
 		}
 	}
 
-	user, err := auth.GetUserByUID(c.Request.Context(), token.UID)
+	user, err := auth.GetUserByUID(ctx, token.UID)
 	if err != nil {
 		Error(c, errors.ErrAuthentication)
 		return
 	}
 
-	cookie, err := auth.SessionCookie(c.Request.Context(), req.IdToken, auth.SessionDuration)
+	cookie, err := auth.SessionCookie(ctx, req.IdToken, auth.SessionDuration)
 	if err != nil {
 		Error(c, errors.ErrSessionFailed)
 		return
@@ -116,64 +93,50 @@ func (h *Handler) LoginUser(c *gin.Context) {
 
 	}
 
-	loginInfo := response.LoginInfo{
-		CsrfToken:   csrfToken,
-		UID:         user.UID,
-		DisplayName: user.DisplayName,
-		PhotoUrl:    user.PhotoURL,
-		Email:       user.Email,
-	}
+	userRecord, err := h.userService.GetUserByUID(ctx, user.UID)
 
-	sessionData := auth.SessionData{
-		LoginInfo: loginInfo,
-		Cookie:    cookie,
-	}
-
-	if err := auth.SetSessionData(token.UID, cookie, &sessionData); err != nil {
+	sessionData, err := auth.CreateUserSession(c, user.UID, cookie, csrfToken, user, userRecord)
+	if err != nil {
+		fmt.Printf("create user session failed: %v\n", err)
 		Error(c, errors.ErrOperation)
 		return
 	}
 
-	//c.SetCookie("Authorization", cookie, int(math.Floor(expiresIn.Seconds())), "/", "192.168.0.213", false, true)
 	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
 
-	//logger.Info("Create session: ", logger.String("uid", token.UID), logger.String("session", cookie), logger.Any("loginInfo", loginInfo))
-
-	c.JSON(http.StatusOK, sessionData)
+	Success(c, sessionData)
+	return
 
 }
 
 func (h *Handler) Signout(c *gin.Context) {
 	_, err := c.Cookie("Authorization")
 	if err != nil {
-		c.Status(http.StatusInternalServerError)
+		Error(c, errors.ErrAuthorization)
 		return
 	}
 
-	sessionData, exist := auth.GetSessionFromContext(c)
-	if !exist {
-		c.Status(http.StatusUnauthorized)
+	sessionData := auth.GetSessionFromContext(c)
+
+	uid := sessionData.UID
+	//fmt.Printf("uid: %v", uid)
+
+	//we first revoke the session
+	if err := auth.RevokeSession(c.Request.Context(), uid); err != nil {
+
+		logger.Error("revoke user session failed", logger.String("uid", uid))
+		Error(c, errors.ErrOperation)
 		return
-	} else {
-		uid := sessionData.UID
-		//fmt.Printf("uid: %v", uid)
-
-		//we first revoke the session
-		if err := auth.RevokeSession(c.Request.Context(), uid); err != nil {
-
-			logger.Error("revoke user session failed", logger.String("uid", uid))
-		}
-
-		if err := auth.RemoveUserSession(uid); err != nil {
-
-			c.Status(http.StatusInternalServerError)
-			return
-		}
-
-		c.Status(http.StatusOK)
-		return
-
 	}
+
+	if err := auth.RemoveUserSession(c, uid); err != nil {
+
+		Error(c, errors.ErrCache)
+		return
+	}
+
+	Success(c, struct{}{})
+	return
 
 }
 
@@ -188,6 +151,7 @@ func (h *Handler) Signout(c *gin.Context) {
 // @Success 200 {object} response.Response{data=response.UserInfo}
 // @Failure 400,401,500 {object} response.Response
 // @Router /api/v1/auth/register [post]
+/*
 func (h *Handler) RegisterUser(c *gin.Context) {
 	// 1. 验证 Firebase token
 	token := c.GetHeader("Authorization")
@@ -279,6 +243,7 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 	// 8. 返回用户信息
 	Success(c, response.ToUserInfo(updatedUser))
 }
+*/
 
 // GetProfile 获取个人资料
 // @Summary 获取个人资料
@@ -323,40 +288,37 @@ func (h *Handler) GetProfile(c *gin.Context) {
 // @Failure 400,401 {object} response.Response
 // @Router /api/v1/users/profile [put]
 func (h *Handler) UpdateProfile(c *gin.Context) {
-	sessionData, exist := auth.GetSessionFromContext(c)
-	if !exist {
-		c.Status(http.StatusUnauthorized)
+
+	sessionData := auth.GetSessionFromContext(c)
+
+	var req request.UpdateProfileRequest
+	uid := sessionData.UID
+	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+		Error(c, errors.ErrValidation)
 		return
-	} else {
-
-		var req request.UpdateProfileRequest
-		if err := c.ShouldBindBodyWithJSON(&req); err != nil {
-			Error(c, errors.ErrValidation)
-			return
-		}
-
-		logger.Info("update request", logger.String("avatar", req.AvatarURL), logger.String("nickname", req.Nickname))
-
-		updatedSession, userRecord, err := auth.UpdateUserProfile(c, sessionData, &req)
-		if err != nil {
-			Error(c, errors.ErrInvalidProfile)
-			return
-		}
-
-		_, err = h.userService.RegisterOrUpdateUser(c, auth.NewAuthUser(userRecord))
-		if err != nil {
-			Error(c, errors.ErrUserProfileUpdateFailed)
-			return
-		}
-
-		if err := auth.SetSessionData(updatedSession.UID, updatedSession.Cookie, &updatedSession); err != nil {
-			Error(c, errors.ErrOperation)
-			return
-		}
-		c.JSON(http.StatusOK, &updatedSession)
-		return
-
 	}
+
+	//update firebase: Nickname, AvatarUrl
+	err := auth.UpdateUserProfile(c, sessionData, &req)
+	if err != nil {
+		Error(c, errors.ErrInvalidProfile)
+		return
+	}
+
+	//update database
+	err = h.userService.RegisterOrUpdateUser(c, uid, sessionData, &req)
+	if err != nil {
+		Error(c, errors.ErrUserProfileUpdateFailed)
+		return
+	}
+
+	if err := auth.UpdateSessionData(c, uid, sessionData); err != nil {
+		Error(c, errors.ErrOperation)
+		return
+	}
+	Success(c, *sessionData)
+	return
+
 }
 
 // UpdateAvatar 更新用户头像

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
 	"github.com/chiliososada/distance-back/pkg/logger"
@@ -223,4 +224,28 @@ func (r *userRepository) UpdateWithAuth(ctx context.Context, user *model.User, a
 		}
 		return nil
 	})
+}
+
+func (r *userRepository) RegisterOrUpdateUser(ctx context.Context, uid string, req *request.UpdateProfileRequest) (*model.User, error) {
+	var user model.User
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		//first ensure the user exists
+		if result := tx.Where("uid = ?", uid).FirstOrCreate(&user,
+			model.User{BaseModel: model.BaseModel{UID: uid}}); result.Error != nil {
+			return result.Error
+		} else {
+			user.UpdateFromRequest(req)
+			fmt.Printf("update user: %+v\n", user)
+			if err := tx.Model(&user).Updates(user).Error; err != nil {
+				return err
+			}
+
+			return nil
+		}
+	})
+	if err != nil {
+		return nil, err
+	} else {
+		return &user, nil
+	}
 }

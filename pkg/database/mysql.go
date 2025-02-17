@@ -45,6 +45,13 @@ func InitMySQL(cfg *config.MySQLConfig) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %v", err)
 	}
+	/*
+		if err := db.AutoMigrate(&model.User{}); err != nil {
+			return nil, fmt.Errorf("Automigrate failed: %v\n", err)
+		} else {
+			fmt.Printf("AutoMigrate succeed\n")
+		}
+	*/
 
 	// 获取通用数据库对象 sql.DB
 	sqlDB, err := db.DB()

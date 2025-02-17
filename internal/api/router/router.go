@@ -35,7 +35,6 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 
 	// API 版本组
 	v1 := r.Group("/api/v1")
-	v1.GET("/checksession", h.CheckSession)
 	v1.POST("/login", h.LoginUser)
 	// 认证相关路由
 
@@ -43,6 +42,8 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 	authenticated := v1.Group("/auth")
 	authenticated.Use(middleware.AuthRequired())
 	{
+
+		authenticated.GET("/checksession", h.CheckSession)
 
 		// 用户相关路由
 		users := authenticated.Group("/users")
@@ -85,28 +86,32 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 		topics := authenticated.Group("/topics")
 		{
 			// 基础操作
-			topics.POST("", h.CreateTopic)       // 创建话题
-			topics.PUT("/:id", h.UpdateTopic)    // 更新话题
-			topics.DELETE("/:id", h.DeleteTopic) // 删除话题
-			topics.GET("/:id", h.GetTopic)       // 获取话题详情
+			topics.POST("", h.CreateTopic) // 创建话题
+			topics.POST("/findby", h.FindTopics)
 
-			// 列表查询
-			topics.GET("", h.ListTopics)               // 获取话题列表
-			topics.GET("/users/:id", h.ListUserTopics) // 获取用户的话题
-			topics.GET("/nearby", h.GetNearbyTopics)   // 获取附近话题
+			/*
+				topics.PUT("/:id", h.UpdateTopic)    // 更新话题
+				topics.DELETE("/:id", h.DeleteTopic) // 删除话题
+				topics.GET("/:id", h.GetTopic)       // 获取话题详情
 
-			// 图片管理
-			topics.POST("/:id/images", h.AddTopicImage) // 添加话题图片
+				// 列表查询
+				topics.GET("", h.ListTopics)               // 获取话题列表
+				topics.GET("/users/:id", h.ListUserTopics) // 获取用户的话题
+				topics.GET("/nearby", h.GetNearbyTopics)   // 获取附近话题
 
-			// 互动相关
-			topics.POST("/:id/interactions/:type", h.AddTopicInteraction)      // 添加互动
-			topics.DELETE("/:id/interactions/:type", h.RemoveTopicInteraction) // 移除互动
-			topics.GET("/:id/interactions/:type", h.GetTopicInteractions)      // 获取互动列表
+				// 图片管理
+				topics.POST("/:id/images", h.AddTopicImage) // 添加话题图片
 
-			// 标签相关路由
-			topics.GET("/:id/tags", h.GetTopicTags)
-			topics.POST("/:id/tags", h.AddTags)
-			topics.DELETE("/:id/tags", h.RemoveTags)
+				// 互动相关
+				topics.POST("/:id/interactions/:type", h.AddTopicInteraction)      // 添加互动
+				topics.DELETE("/:id/interactions/:type", h.RemoveTopicInteraction) // 移除互动
+				topics.GET("/:id/interactions/:type", h.GetTopicInteractions)      // 获取互动列表
+
+				// 标签相关路由
+				topics.GET("/:id/tags", h.GetTopicTags)
+				topics.POST("/:id/tags", h.AddTags)
+				topics.DELETE("/:id/tags", h.RemoveTags)
+			*/
 		}
 
 		// 聊天相关路由

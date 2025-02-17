@@ -59,6 +59,8 @@ type LoginInfo struct {
 	DisplayName string `json:"display_name"`
 	PhotoUrl    string `json:"photo_url"`
 	Email       string `json:"email"`
+	Gender      string `json:"gender"`
+	Bio         string `json:"bio"`
 }
 
 // 使用泛型定义分页响应类型
@@ -106,10 +108,10 @@ func ToUserInfo(user *model.User) *UserInfo {
 		info.BirthDate = user.BirthDate
 	}
 
-	if user.LocationLatitude != 0 || user.LocationLongitude != 0 {
+	if user.LocationLatitude != nil || user.LocationLongitude != nil {
 		info.Location = &Location{
-			Latitude:  user.LocationLatitude,
-			Longitude: user.LocationLongitude,
+			Latitude:  *user.LocationLatitude,
+			Longitude: *user.LocationLongitude,
 		}
 	}
 

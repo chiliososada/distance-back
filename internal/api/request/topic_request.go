@@ -1,12 +1,16 @@
 package request
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"mime/multipart"
 	"time"
 )
 
 // CreateTopicRequest 创建话题请求
 type CreateTopicRequest struct {
+	Uid       string    `json:"uid" binding:"required"`
 	Title     string    `json:"title" binding:"required,min=1,max=255"`
 	Content   string    `json:"content" binding:"omitempty,max=4096"` //must present, can be empty, <=4096
 	Images    []string  `json:"images" binding:"required,dive,min=1"` //must present, can be empty, entries cannot be empty
@@ -83,4 +87,50 @@ type GetTopicInteractionsRequest struct {
 // BatchGetTopicsRequest 批量获取话题请求
 type BatchGetTopicsRequest struct {
 	TopicUIDs []string `json:"topic_uids" binding:"required,min=1,max=100,dive,uuid"`
+}
+
+type FindTopicsBy int
+
+const (
+	FindTopicsByUnknown FindTopicsBy = iota
+	FindTopicsByRecency
+	FindTopicsByPopularity
+)
+
+var byToString = map[FindTopicsBy]string{
+	FindTopicsByUnknown:    "unknown",
+	FindTopicsByRecency:    "recent",
+	FindTopicsByPopularity: "popular",
+}
+var stringToBy = map[string]FindTopicsBy{
+	"recent":  FindTopicsByRecency,
+	"popular": FindTopicsByPopularity,
+}
+
+func (a *FindTopicsBy) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	if by := stringToBy[s]; by == FindTopicsByUnknown {
+		return errors.New("unknown find topics by parameter")
+	} else {
+		*a = by
+		return nil
+	}
+
+}
+func (a FindTopicsBy) MarshalJSON() ([]byte, error) {
+	if a == FindTopicsByUnknown {
+		return nil, errors.New(fmt.Sprintf("unknown find topic by: %v", a))
+	} else {
+		return json.Marshal(byToString[a])
+	}
+}
+
+type FindTopicsByRequest struct {
+	FindBy       FindTopicsBy `json:"findby"`
+	Max          int          `json:"max"`
+	RecencyScore int          `json:"recency,omitempty"`
 }

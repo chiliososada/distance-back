@@ -6,10 +6,14 @@ import (
 	"context"
 
 	"github.com/chiliososada/distance-back/internal/model"
+	"github.com/gin-gonic/gin"
+
+	"github.com/chiliososada/distance-back/internal/api/request"
 )
 
 // UserRepository 用户仓储接口
 type UserRepository interface {
+	RegisterOrUpdateUser(ctx context.Context, uid string, req *request.UpdateProfileRequest) (*model.User, error)
 	// 基础操作
 	Create(ctx context.Context, user *model.User) error
 	Update(ctx context.Context, user *model.User) error
@@ -41,8 +45,10 @@ type UserRepository interface {
 
 // TopicRepository 话题仓储接口
 type TopicRepository interface {
+	CreateNewTopic(ctx context.Context, userUID string, req *request.CreateTopicRequest) (*model.Topic, error)
+	FindTopicsBy(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error)
+
 	// 基础操作
-	Create(ctx context.Context, topic *model.Topic) error
 	Update(ctx context.Context, topic *model.Topic) error
 	Delete(ctx context.Context, uid string) error
 	GetByUID(ctx context.Context, uid string) (*model.Topic, error)
@@ -76,6 +82,7 @@ type TopicRepository interface {
 
 // ChatRepository 聊天仓储接口
 type ChatRepository interface {
+	SoftDeleteTopicAndRoom(ctx context.Context, topicUID, roomUID string) error
 
 	// 聊天室操作
 	CreateRoom(ctx context.Context, room *model.ChatRoom) error
@@ -102,9 +109,6 @@ type ChatRepository interface {
 	PinRoom(ctx context.Context, userUID, roomUID string) error
 	UnpinRoom(ctx context.Context, userUID, roomUID string) error
 	GetPinnedRooms(ctx context.Context, userUID string) ([]*model.ChatRoom, error)
-
-	// 删除操作
-	SoftDeleteTopicAndRoom(ctx context.Context, topicUID, roomUID string) error
 }
 
 // RelationshipRepository 关系仓储接口

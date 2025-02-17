@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/chiliososada/distance-back/pkg/auth"
@@ -14,7 +13,6 @@ func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session, err := c.Cookie("Authorization")
 		if err != nil {
-			fmt.Printf("err: %v\n", err.Error())
 			if err == http.ErrNoCookie {
 				c.AbortWithStatus(http.StatusUnauthorized)
 			} else {
@@ -30,15 +28,11 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		sessionData, err := auth.GetSessionData(token.UID, session)
+		err = auth.SetSessionDataInContext(c, token.UID, session)
 		if err != nil {
-			fmt.Printf("err: %v\n", err.Error())
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else if sessionData != nil {
-			auth.SetSessionInContext(c, sessionData)
-			c.Next()
+			c.AbortWithError(http.StatusUnauthorized, err)
 		} else {
-			c.AbortWithStatus(http.StatusUnauthorized)
+			c.Next()
 		}
 		return
 	}

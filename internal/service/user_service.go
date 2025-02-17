@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
 	"github.com/chiliososada/distance-back/pkg/auth"
@@ -13,8 +14,6 @@ import (
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/chiliososada/distance-back/pkg/storage"
 	"github.com/chiliososada/distance-back/pkg/utils"
-
-	"github.com/google/uuid"
 )
 
 type UserService struct {
@@ -31,79 +30,24 @@ func NewUserService(userRepo repository.UserRepository, storage storage.Storage)
 }
 
 // RegisterOrUpdateUser 注册或更新用户信息（Firebase认证后）
-func (s *UserService) RegisterOrUpdateUser(ctx context.Context, firebaseUser *auth.AuthUser) (*model.User, error) {
-	// 查找现有用户
-	user, err := s.userRepo.GetByFirebaseUID(ctx, firebaseUser.UID)
+func (s *UserService) RegisterOrUpdateUser(ctx context.Context, uid string, session *auth.SessionData, req *request.UpdateProfileRequest) error {
+	user, err := s.userRepo.RegisterOrUpdateUser(ctx, uid, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user by firebase uid: %w", err)
-	}
-
-	if user == nil {
-		// 创建新用户
-		user = &model.User{
-			BaseModel: model.BaseModel{
-				UID: uuid.NewString(), // 添加 uuid 导入
-			},
-			Nickname:            firebaseUser.DisplayName,
-			AvatarURL:           firebaseUser.PhotoURL,
-			Gender:              "other",
-			Status:              model.UserStatusActive,
-			PrivacyLevel:        model.PrivacyPublic,
-			NotificationEnabled: true,
-			LocationSharing:     true,
-			PhotoEnabled:        true,
-			UserType:            "individual",
-		}
-
-		// 准备认证信息
-		auth := &model.UserAuthentication{
-			BaseModel: model.BaseModel{
-				UID: uuid.NewString(),
-			},
-			UserUID:      user.UID,
-			FirebaseUID:  firebaseUser.UID,
-			Email:        utils.NewNullString(firebaseUser.Email),
-			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
-			LastSignInAt: utils.TimePtr(time.Now()),
-			AuthProvider: "password",
-		}
-
-		// 使用事务创建用户和认证信息
-		if err := s.userRepo.CreateWithAuth(ctx, user, auth); err != nil {
-			return nil, fmt.Errorf("failed to create user and authentication: %w", err)
-		}
+		return err
 	} else {
-		// 更新现有用户信息
-		if firebaseUser.DisplayName != "" {
-			user.Nickname = firebaseUser.DisplayName
-		}
-		if firebaseUser.PhotoURL != "" {
-			user.AvatarURL = firebaseUser.PhotoURL
-		}
+		//update session data
 
-		// 准备认证信息更新
-		auth := &model.UserAuthentication{
-			UserUID:      user.UID,
-			FirebaseUID:  firebaseUser.UID,
-			Email:        utils.NewNullString(firebaseUser.Email),
-			PhoneNumber:  utils.NewNullString(firebaseUser.PhoneNumber),
-			LastSignInAt: utils.TimePtr(time.Now()),
-			AuthProvider: "password",
+		*session = auth.SessionData{
+			CsrfToken:   session.CsrfToken,
+			UID:         user.UID,
+			DisplayName: user.Nickname,
+			PhotoUrl:    user.AvatarURL,
+			Email:       user.Email,
+			Gender:      user.Gender,
+			Bio:         user.Bio,
 		}
-
-		// 使用事务更新用户和认证信息
-		if err := s.userRepo.UpdateWithAuth(ctx, user, auth); err != nil {
-			return nil, fmt.Errorf("failed to update user and authentication: %w", err)
-		}
+		return nil
 	}
-
-	// 缓存用户信息
-	cacheKey := cache.UserKey(user.UID)
-	if err := cache.Set(cacheKey, user, cache.DefaultExpiration); err != nil {
-		logger.Warn("failed to cache user info", logger.Any("error", err))
-	}
-
-	return user, nil
 }
 
 // UpdateProfile 更新用户资料
@@ -202,8 +146,8 @@ func (s *UserService) UpdateLocation(ctx context.Context, userUID string, lat, l
 	}
 
 	// 更新位置信息
-	user.LocationLatitude = lat
-	user.LocationLongitude = lng
+	user.LocationLatitude = &lat
+	user.LocationLongitude = &lng
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to update user location: %w", err)
 	}
@@ -240,16 +184,6 @@ func (s *UserService) GetByFirebaseUID(ctx context.Context, firebaseUID string) 
 // GetUserByUID 获取用户信息
 // 在 service/user_service.go 中
 func (s *UserService) GetUserByUID(ctx context.Context, userUID string) (*model.User, error) {
-	logger.Info("Getting user by UID in service", logger.String("uid", userUID))
-
-	// 先从缓存获取
-	cacheKey := cache.UserKey(userUID)
-	var cachedUser model.User
-	err := cache.Get(cacheKey, &cachedUser)
-	if err == nil && cachedUser.UID != "" {
-		logger.Info("Got user from cache", logger.Any("user", cachedUser))
-		return &cachedUser, nil
-	}
 
 	// 从数据库获取
 	user, err := s.userRepo.GetByUID(ctx, userUID)
@@ -258,21 +192,9 @@ func (s *UserService) GetUserByUID(ctx context.Context, userUID string) (*model.
 			logger.String("uid", userUID),
 			logger.Any("error", err))
 		return nil, fmt.Errorf("failed to get user: %w", err)
+	} else {
+		return user, nil
 	}
-
-	if user == nil || user.UID == "" {
-		logger.Error("User not found in db", logger.String("uid", userUID))
-		return nil, errors.New("user not found")
-	}
-
-	logger.Info("Got user from db", logger.Any("user", user))
-
-	// 缓存用户信息
-	if err := cache.Set(cacheKey, user, cache.DefaultExpiration); err != nil {
-		logger.Warn("Failed to cache user info", logger.Any("error", err))
-	}
-
-	return user, nil
 }
 
 // SearchUsers 搜索用户

@@ -3,13 +3,23 @@ package model
 import (
 	"mime/multipart"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
+	"gorm.io/gorm"
 )
 
 // BaseModel 基础模型
 type BaseModel struct {
-	UID       string    `gorm:"column:uid;type:varchar(36);primaryKey;not null;default:uuid()" json:"uid"`
+	UID       string    `gorm:"column:uid;type:varchar(36);primaryKey;not null" json:"uid"`
 	CreatedAt time.Time `gorm:"index" json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UpdatedAt time.Time `gorm:"updated_at" json:"updated_at"`
+}
+
+func (base *BaseModel) BeforeCreate(tx *gorm.DB) error {
+	if base.UID == "" {
+		base.UID = uuid.NewV4().String()
+	}
+	return nil
 }
 
 // Pagination 分页参数

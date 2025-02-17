@@ -14,7 +14,7 @@ type TopicResponse struct {
 	User              *UserBrief  `json:"user"`
 	Images            []ImageInfo `json:"images,omitempty"`
 	Tags              []TagInfo   `json:"tags,omitempty"`
-	Location          *Location   `json:"location"`
+	Location          *Location   `json:"location,omitempty"`
 	Distance          float64     `json:"distance,omitempty"`
 	LikesCount        uint        `json:"likes_count"`
 	ViewsCount        uint        `json:"views_count"`
@@ -24,6 +24,11 @@ type TopicResponse struct {
 	ExpiresAt         time.Time   `json:"expires_at"`
 	CreatedAt         time.Time   `json:"created_at"`
 	UpdatedAt         time.Time   `json:"updated_at"`
+}
+
+type FindTopicByResponse struct {
+	Topics []*model.CachedTopic `json:"topics,omitempty"`
+	Score  int                  `json:"score"`
 }
 
 // ImageInfo 图片信息
@@ -79,6 +84,14 @@ func ToTopicResponse(topic *model.Topic) *TopicResponse {
 		return nil
 	}
 
+	var loc *Location
+	if topic.LocationLatitude != nil && topic.LocationLongitude != nil {
+		loc = &Location{
+			Latitude:  *topic.LocationLatitude,
+			Longitude: *topic.LocationLongitude,
+		}
+	}
+
 	resp := &TopicResponse{
 		UID:               topic.UID,
 		Title:             topic.Title,
@@ -91,10 +104,7 @@ func ToTopicResponse(topic *model.Topic) *TopicResponse {
 		ExpiresAt:         topic.ExpiresAt,
 		CreatedAt:         topic.CreatedAt,
 		UpdatedAt:         topic.UpdatedAt,
-		Location: &Location{
-			Latitude:  topic.LocationLatitude,
-			Longitude: topic.LocationLongitude,
-		},
+		Location:          loc,
 	}
 
 	// Convert user info

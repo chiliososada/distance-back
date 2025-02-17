@@ -2,54 +2,40 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
+	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
 	"github.com/chiliososada/distance-back/pkg/logger"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"gorm.io/gorm"
 )
 
+const (
+	RecentTopicCacheThreshold = 1000
+)
+
 type topicRepository struct {
-	db *gorm.DB
+	db                 *gorm.DB
+	postedTopicCounter atomic.Int64
+	recentTopicCache   repository.TopicCache
 }
 
 // NewTopicRepository 创建话题仓储实例
 func NewTopicRepository(db *gorm.DB) repository.TopicRepository {
-	return &topicRepository{db: db}
-}
+	rtc, err := repository.NewRedisRecentTopic(context.Background())
+	if err != nil {
+		panic(fmt.Sprintf("create recentTopicCache failed: %v\n", err))
+	}
+	tr := &topicRepository{db: db, recentTopicCache: rtc}
 
-// // Create 创建话题
-//
-//	func (r *topicRepository) Create(ctx context.Context, topic *model.Topic) error {
-//		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-//			if err := tx.Create(topic).Error; err != nil {
-//				return err
-//			}
-//			return nil
-//		})
-//	}
-//
-// Create 创建话题后立即获取完整信息
-func (r *topicRepository) Create(ctx context.Context, topic *model.Topic) error {
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(topic).Error; err != nil {
-			return err
-		}
-
-		// 创建后立即查询完整信息
-		return tx.Preload("User").
-			Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
-				return db.Order("sort_order ASC")
-			}).
-			Preload("Tags").
-			Where("uid = ?", topic.UID).
-			First(topic).Error
-	})
-	return err
+	return tr
 }
 
 // ListByTag 获取带有特定标签的话题列表
@@ -461,6 +447,126 @@ func (r *topicRepository) BatchCreate(ctx context.Context, tags []string) ([]str
 	})
 
 	return tagUIDs, err
+}
+
+func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, req *request.CreateTopicRequest) (*model.Topic, error) {
+	var topic model.Topic
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		//create an empty topic to lock the topic id
+		if result := tx.Model(&model.Topic{}).Where("uid = ?", req.Uid).
+			FirstOrCreate(&topic, model.Topic{
+				BaseModel:         model.BaseModel{UID: req.Uid},
+				UserUID:           userUID,
+				Title:             req.Title,
+				Content:           req.Content,
+				LocationLatitude:  req.Latitude,
+				LocationLongitude: req.Longitude,
+				ExpiresAt:         req.ExpiresAt}); result.Error != nil {
+			return result.Error
+		} else if result.RowsAffected == 0 {
+			//topic exists
+			return fmt.Errorf("topic id %s exists", req.Uid)
+		}
+
+		//create tags
+		model_tags := []*model.Tag{}
+		topic_tag := []model.TopicTag{}
+		for _, tagName := range req.Tags {
+			var t model.Tag
+			result := tx.Where("name = ?", tagName).First(&t)
+			fmt.Printf("result: %+v\n", result)
+			if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+				return result.Error
+			}
+			if result.RowsAffected == 1 {
+				if err := tx.Model(&t).Update("use_count", t.UseCount+1).Error; err != nil {
+					return err
+				}
+			} else {
+				t = model.Tag{
+					Name:     tagName,
+					UseCount: 1,
+				}
+				if err := tx.Create(&t).Error; err != nil {
+					return err
+				}
+
+			}
+
+			model_tags = append(model_tags, &t)
+			topic_tag = append(topic_tag, model.TopicTag{TopicUID: req.Uid, TagUID: t.UID})
+		}
+
+		//insert images
+		model_images := []model.TopicImage{}
+		for _, imageUrl := range req.Images {
+			model_images = append(model_images, model.TopicImage{TopicUID: topic.UID, ImageURL: imageUrl})
+		}
+		if len(model_images) > 0 {
+			if result := tx.Create(&model_images); result.Error != nil {
+				return result.Error
+			} else if result.RowsAffected != int64(len(req.Images)) {
+				return fmt.Errorf("insert topic image failed")
+			}
+		}
+
+		//update tag-topic join table
+		// this needs to be done manually since the table is created manually
+		if len(topic_tag) > 0 {
+			if result := tx.Create(&topic_tag); result.Error != nil {
+				fmt.Printf("crearte topic tag failed: %v\n", result.Error)
+				return result.Error
+			} else if result.RowsAffected != int64(len(topic_tag)) {
+				return fmt.Errorf("update topic-tag failed")
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	} else {
+		updated := r.postedTopicCounter.Add(1)
+		if updated == RecentTopicCacheThreshold {
+			r.postedTopicCounter.Store(int64(0))
+			go r.recentTopicCache.ReLoad(ctx)
+		}
+		return &topic, nil
+	}
+
+}
+
+func (r *topicRepository) FindTopicsBy(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error) {
+	var updatedScore int
+	switch by.FindBy {
+	case request.FindTopicsByRecency:
+
+		topics, score, err := r.findTopicsByRecency(c, by.Max, by.RecencyScore)
+		updatedScore = score
+		if err == nil {
+			return topics, updatedScore, nil
+		} else if err.Error() == repository.CheckDBError {
+			goto CheckDB
+		} else {
+			return nil, updatedScore, err
+		}
+	case request.FindTopicsByPopularity:
+		return r.findTopicsByPopularity(c, by.Max)
+	default:
+		return nil, updatedScore, errors.New(fmt.Sprintf("unimplemented find topics by %v", by))
+	}
+CheckDB:
+	return nil, updatedScore, nil
+}
+
+func (r *topicRepository) findTopicsByRecency(c *gin.Context, count int, before int) ([]*model.CachedTopic, int, error) {
+	return r.recentTopicCache.Get(c, count, before)
+
+}
+
+func (r *topicRepository) findTopicsByPopularity(c *gin.Context, count int) ([]*model.CachedTopic, int, error) {
+	return nil, 0, nil
 }
 
 // ListPopular 获取热门标签

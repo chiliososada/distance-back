@@ -5,13 +5,20 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
 	"github.com/chiliososada/distance-back/pkg/cache"
 	"github.com/chiliososada/distance-back/pkg/constants"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/chiliososada/distance-back/pkg/storage"
-	"github.com/google/uuid"
+	"github.com/gin-gonic/gin"
+)
+
+const (
+	RecentTopicsLimit        = 1000
+	RecentTopicsLoadInterval = time.Minute * 10
+	RecentTopicsExpire       = time.Minute * 11 //1more?
 )
 
 type TopicService struct {
@@ -28,127 +35,25 @@ func NewTopicService(
 	relationRepo repository.RelationshipRepository,
 	storage storage.Storage,
 ) *TopicService {
-	return &TopicService{
+	ts := &TopicService{
 		topicRepo:    topicRepo,
 		userRepo:     userRepo,
 		relationRepo: relationRepo,
 		storage:      storage,
 	}
+	return ts
 }
 
 // CreateTopic 创建话题
-func (s *TopicService) CreateTopic(ctx context.Context, userUID string, topic *model.Topic, images []*model.File, tags []string) (*model.Topic, error) {
-	// 验证用户状态
-	user, err := s.userRepo.GetByUID(ctx, userUID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-	if user == nil {
-		return nil, ErrUserNotFound
-	}
-	if user.Status != "active" {
-		return nil, ErrInvalidUserStatus
-	}
+func (s *TopicService) CreateTopic(ctx context.Context, userUID string, topic *request.CreateTopicRequest) (*model.Topic, error) {
 
-	// 设置话题基本信息
-	topic.UserUID = userUID
-	topic.Status = "active"
-	if topic.ExpiresAt.IsZero() {
-		topic.ExpiresAt = time.Now().Add(24 * time.Hour) // 默认24小时后过期
-	}
-	if topic.UID == "" {
-		topic.UID = uuid.New().String()
-	}
+	return s.topicRepo.CreateNewTopic(ctx, userUID, topic)
+}
 
-	// 创建话题
-	if err := s.topicRepo.Create(ctx, topic); err != nil {
-		return nil, fmt.Errorf("failed to create topic: %w", err)
-	}
+func (s *TopicService) FindTopicBy(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error) {
 
-	// 处理图片
-	if len(images) > 0 {
-		topicImages := make([]*model.TopicImage, 0, len(images))
-		for i, img := range images {
-			fileURL, err := s.storage.UploadFile(ctx, img.File, storage.TopicDirectory)
-			if err != nil {
-				logger.Error("failed to upload topic image",
-					logger.Any("error", err),
-					logger.String("topic_uid", topic.UID),
-					logger.Int("image_index", i))
-				continue
-			}
+	return s.topicRepo.FindTopicsBy(c, by)
 
-			topicImage := &model.TopicImage{
-				TopicUID:    topic.UID,
-				ImageURL:    fileURL,
-				SortOrder:   uint(i),
-				ImageWidth:  uint(img.Width),
-				ImageHeight: uint(img.Height),
-				FileSize:    img.Size,
-			}
-			topicImages = append(topicImages, topicImage)
-		}
-
-		logger.Info("Saving topic images",
-			logger.String("topic_uid", topic.UID),
-			logger.Int("image_count", len(topicImages)))
-
-		if err := s.topicRepo.AddImages(ctx, topic.UID, topicImages); err != nil {
-			logger.Error("failed to save topic images",
-				logger.Any("error", err),
-				logger.String("topic_uid", topic.UID))
-			return nil, fmt.Errorf("failed to save topic images: %w", err)
-		}
-	}
-
-	// 处理标签
-	if len(tags) > 0 {
-		logger.Info("Processing tags",
-			logger.Any("tags", tags),
-			logger.String("topic_uid", topic.UID))
-
-		// 先创建或获取标签
-		tagUIDs, err := s.topicRepo.BatchCreate(ctx, tags)
-		if err != nil {
-			logger.Error("Failed to create/get tags",
-				logger.Any("error", err),
-				logger.Any("tags", tags))
-			return nil, fmt.Errorf("failed to process tags: %w", err)
-		}
-
-		// 添加标签关联
-		if err := s.topicRepo.AddTags(ctx, topic.UID, tagUIDs); err != nil {
-			logger.Error("Failed to add tags",
-				logger.Any("error", err),
-				logger.String("topic_uid", topic.UID),
-				logger.Any("tag_uids", tagUIDs))
-			return nil, fmt.Errorf("failed to add tags: %w", err)
-		}
-
-		logger.Info("Successfully added tags",
-			logger.String("topic_uid", topic.UID),
-			logger.Any("tags", tags),
-			logger.Any("tag_uids", tagUIDs))
-	}
-
-	// 重新获取完整信息
-	updatedTopic, err := s.topicRepo.GetByUID(ctx, topic.UID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get updated topic: %w", err)
-	}
-
-	// 缓存话题信息
-	cacheKey := cache.TopicKey(topic.UID)
-	if err := cache.Set(cacheKey, updatedTopic, cache.DefaultExpiration); err != nil {
-		logger.Warn("failed to cache topic", logger.Any("error", err))
-	}
-
-	logger.Info("Retrieved updated topic",
-		logger.String("topic_uid", topic.UID),
-		logger.Int("image_count", len(updatedTopic.TopicImages)),
-		logger.Int("tag_count", len(updatedTopic.Tags)))
-
-	return updatedTopic, nil
 }
 
 // UpdateTopic 更新话题
