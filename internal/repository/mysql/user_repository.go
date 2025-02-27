@@ -41,7 +41,9 @@ func (r *userRepository) GetByUID(ctx context.Context, uid string) (*model.User,
 	logger.Info("Getting user by UID", logger.String("uid", uid))
 
 	var user model.User
-	result := r.db.WithContext(ctx).
+	result := r.db.WithContext(ctx).Preload("Chat", func(db *gorm.DB) *gorm.DB {
+		return db.Select("chat_room_uid,user_uid")
+	}).
 		// Debug(). // 添加这行来看SQL日志
 		Where("uid = ?", uid).
 		First(&user)

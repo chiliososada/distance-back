@@ -30,7 +30,7 @@ func AuthRequired() gin.HandlerFunc {
 
 		err = auth.SetSessionDataInContext(c, token.UID, session)
 		if err != nil {
-			c.AbortWithError(http.StatusUnauthorized, err)
+			c.AbortWithStatus(http.StatusUnauthorized)
 		} else {
 			c.Next()
 		}

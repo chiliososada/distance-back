@@ -521,6 +521,18 @@ func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, re
 			}
 		}
 
+		chatRoom := model.ChatRoom{
+			BaseModel: model.BaseModel{
+				UID: uuid.New().String(),
+			},
+			TopicUID: topic.UID,
+			Name:     topic.Title,
+			Type:     "group",
+		}
+		if result := tx.Create(&chatRoom); result.Error != nil {
+			return fmt.Errorf("create chat room for topic %v failed dueto %v", topic.UID, result.Error)
+		}
+
 		return nil
 	})
 
@@ -541,9 +553,10 @@ func (r *topicRepository) FindTopicsBy(c *gin.Context, by request.FindTopicsByRe
 	var updatedScore int
 	switch by.FindBy {
 	case request.FindTopicsByRecency:
-
+		fmt.Printf("find topics by recency: %v\n", by.RecencyScore)
 		topics, score, err := r.findTopicsByRecency(c, by.Max, by.RecencyScore)
 		updatedScore = score
+		fmt.Printf("topics: %v, new score: %v\n", topics, updatedScore)
 		if err == nil {
 			return topics, updatedScore, nil
 		} else if err.Error() == repository.CheckDBError {

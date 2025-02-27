@@ -15,4 +15,5 @@ vendor/
 /install
 /dev.key
 /dev_domain.crt
+/fullchain.pem
 

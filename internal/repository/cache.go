@@ -56,7 +56,9 @@ func (r *RedisRecentTopic) recentTopics(ctx context.Context) ([]*model.Topic, er
 
 	result := r.db.WithContext(ctx).Preload("User", func(db *gorm.DB) *gorm.DB {
 		return db.Select("users.uid, users.nickname, users.avatar_url, users.gender, users.location_latitude, users.location_longitude")
-	}).Preload("TopicImages").Preload("Tags").
+	}).Preload("TopicImages").Preload("Tags").Preload("ChatRoom", func(db *gorm.DB) *gorm.DB {
+		return db.Select("chat_rooms.uid, chat_rooms.topic_uid")
+	}).
 		Where("topics.expires_at > ? AND topics.status = ?", time.Now(), "active").
 		Order("topics.updated_at DESC").
 		Limit(loadLimit).Find(&topics)
@@ -130,17 +132,15 @@ func (r *RedisRecentTopic) Get(c *gin.Context, args ...interface{}) ([]*model.Ca
 		// we try to read 1 more to get the next cursor
 		max := "+inf"
 		if recencyScore != 0 {
-			max = strconv.Itoa(recencyScore)
+			max = "(" + strconv.Itoa(recencyScore)
 		}
-		tryCount := int64(count + 1)
 		result, err := r.client.ZRevRangeByScoreWithScores(ctx, zsetKey, &redis.ZRangeBy{
 			Min:   "0",
 			Max:   max,
-			Count: tryCount}).Result()
+			Count: int64(count)}).Result()
 		if err != nil {
 			return nil, recencyScore, err
 		}
-		//fmt.Printf("result: %v\n", result)
 
 		var cachedTopics []*model.CachedTopic
 		var topicKeys []string
@@ -165,10 +165,8 @@ func (r *RedisRecentTopic) Get(c *gin.Context, args ...interface{}) ([]*model.Ca
 				}
 			}
 			updatedScore := result[len(result)-1].Score
-			if len(result) != int(tryCount) {
-				updatedScore -= 1
-			}
-			return cachedTopics[0 : len(cachedTopics)-1], int(updatedScore), nil
+
+			return cachedTopics, int(updatedScore), nil
 
 		}
 

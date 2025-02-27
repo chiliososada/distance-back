@@ -40,6 +40,7 @@ type Topic struct {
 	User              User          `gorm:"foreignKey:UserUID;references:UID" json:"user"`
 	TopicImages       []*TopicImage `gorm:"foreignKey:TopicUID;references:UID" json:"images"`
 	Tags              []*Tag        `gorm:"many2many:topic_tags;foreignKey:UID;joinForeignKey:TopicUID;references:UID;joinReferences:TagUID" json:"tags"`
+	ChatRoom          *ChatRoom     `gorm:"foreignKey:TopicUID;references:UID" json:"chat_room"`
 }
 
 // TopicImage 话题图片模型
@@ -107,6 +108,7 @@ type CachedTopic struct {
 	} `json:"user"`
 	TopicImages []string `json:"topic_images" copier:"-"`
 	Tags        []string `json:"tags" copier:"-"`
+	ChatID      string   `json:"chat_id" copier:"-"`
 }
 
 func (t *Topic) CastToCached() CachedTopic {
@@ -124,6 +126,9 @@ func (t *Topic) CastToCached() CachedTopic {
 	copier.Copy(&cached, t)
 	cached.TopicImages = images
 	cached.Tags = tags
+	if t.ChatRoom != nil {
+		cached.ChatID = t.ChatRoom.UID
+	}
 	return cached
 }
 

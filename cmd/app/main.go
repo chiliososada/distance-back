@@ -132,7 +132,7 @@ func main() {
 			logger.String("addr", srv.Addr),
 			logger.String("mode", cfg.App.Mode))
 
-		if err := srv.ListenAndServeTLS("dev_domain.crt", "dev.key"); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServeTLS("fullchain.pem", "dev.key"); err != nil && err != http.ErrServerClosed {
 			logger.Error("Server failed to start", logger.Any("error", err))
 			os.Exit(1)
 		}

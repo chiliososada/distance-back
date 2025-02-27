@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"crypto/rand"
 
@@ -13,27 +12,12 @@ import (
 	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/pkg/auth"
-	"github.com/chiliososada/distance-back/pkg/cache"
 	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 
-func generateCSRFToken(cookie string, expiresIn time.Duration) (string, error) {
-
-	var token string
-	if err := cache.Get(cookie, &token); err != nil {
-		return "", err
-	}
-
-	if token != "" {
-		//update expiration
-		if err := cache.Expire(cookie, expiresIn); err != nil {
-			return "", err
-		}
-		logger.Info("csrf token exists: ", logger.String("token", token))
-		return token, nil
-	}
+func generateSecurityToken(cookie string) (string, error) {
 
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -47,6 +31,7 @@ func generateCSRFToken(cookie string, expiresIn time.Duration) (string, error) {
 func (h *Handler) CheckSession(c *gin.Context) {
 
 	sessionData := auth.GetSessionFromContext(c)
+	fmt.Printf("sessionData: %+v\n", sessionData)
 	Success(c, sessionData)
 
 }
@@ -86,7 +71,14 @@ func (h *Handler) LoginUser(c *gin.Context) {
 		return
 	}
 
-	csrfToken, err := generateCSRFToken(cookie, auth.SessionDuration)
+	csrfToken, err := generateSecurityToken(cookie)
+	if err != nil {
+		Error(c, errors.ErrOperation)
+		return
+
+	}
+
+	chatToken, err := generateSecurityToken(cookie)
 	if err != nil {
 		Error(c, errors.ErrOperation)
 		return
@@ -95,7 +87,7 @@ func (h *Handler) LoginUser(c *gin.Context) {
 
 	userRecord, err := h.userService.GetUserByUID(ctx, user.UID)
 
-	sessionData, err := auth.CreateUserSession(c, user.UID, cookie, csrfToken, user, userRecord)
+	sessionData, err := auth.CreateUserSession(c, user.UID, cookie, csrfToken, chatToken, user, userRecord)
 	if err != nil {
 		fmt.Printf("create user session failed: %v\n", err)
 		Error(c, errors.ErrOperation)

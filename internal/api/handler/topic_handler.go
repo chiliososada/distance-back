@@ -40,7 +40,7 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 		Error(c, errors.ErrValidation.WithDetails(err.Error()))
 		return
 	}
-	fmt.Printf("uid:%v, req: %+v\n", userUID, req)
+	//fmt.Printf("uid:%v, req: %+v\n", userUID, req)
 
 	// 创建话题
 	createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, &req)

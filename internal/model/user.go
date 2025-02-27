@@ -52,6 +52,8 @@ type User struct {
 	FollowersCount int64 `gorm:"-" json:"followers_count"`
 	FollowingCount int64 `gorm:"-" json:"following_count"`
 	FriendsCount   int64 `gorm:"-" json:"friends_count"`
+
+	Chat []UserChat `gorm:"foreignKey:UserUID;references:UID" json:"chat"`
 }
 
 func (u *User) UpdateFromRequest(req *request.UpdateProfileRequest) {
@@ -141,4 +143,12 @@ type UserBan struct {
 	Status      string    `gorm:"type:enum('active','expired','cancelled');default:'active';index:idx_user_status" json:"status"`
 	User        User      `gorm:"foreignKey:UserUID;references:UID" json:"user"`
 	Operator    User      `gorm:"foreignKey:OperatorUID;references:UID" json:"operator"`
+}
+
+type UserChat struct {
+	BaseModel
+	UserUID     string   `gorm:"type:varchar(36);uniqueIndex" json:"user_uid"`
+	ChatRoomUID string   `gorm:"type:varchar(36);index" json:"chat_room_uid"`
+	User        User     `gorm:"foreignKey:UserUID;references:UID" json:"user"`
+	ChatRoom    ChatRoom `gorm:"foreignKey:ChatRoomUID;references:UID" json:"chat_room"`
 }
