@@ -312,7 +312,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 
 	//update firebase: Nickname, AvatarUrl
-	err := auth.UpdateUserProfile(c, sessionData, &req)
+	err := auth.UpdateUserProfile(c, sessionData.UID, &req)
 	if err != nil {
 		Error(c, errors.ErrInvalidProfile)
 		return

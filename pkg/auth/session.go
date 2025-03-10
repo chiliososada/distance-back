@@ -135,9 +135,11 @@ func setSessionData(c *gin.Context, uid string, value *SessionData) error {
 		Result:     &data,
 	})
 	if err != nil {
+		fmt.Printf("new decoder failed: %+v\n", err)
 		return err
 	}
 	if err := decoder.Decode(*value); err != nil {
+		fmt.Printf("decode failed: %+v\n", err)
 		return err
 	}
 	result := cache.RedisClient.HSet(ctx, key, data)
@@ -180,7 +182,9 @@ func setUserSession(c *gin.Context, uid string, session string) error {
 
 func UpdateSessionData(c *gin.Context, uid string, newSession *SessionData) error {
 	ctx := c.Request.Context()
-	if _, err := cache.RedisClient.Get(ctx, userSessionKey(uid)).Result(); err != nil {
+	fmt.Printf("update session data: %+v\n", newSession)
+	if _, err := cache.RedisClient.Get(ctx, userSessionKey(newSession.Session)).Result(); err != nil {
+		fmt.Printf("get user session key failed: %+v\n", err)
 		return err
 	} else {
 		return setSessionData(c, uid, newSession)

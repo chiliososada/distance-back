@@ -38,16 +38,13 @@ func (s *UserService) RegisterOrUpdateUser(ctx context.Context, uid string, sess
 		//update session data
 
 		if session != nil {
-
-			*session = auth.SessionData{
-				CsrfToken:   session.CsrfToken,
-				UID:         user.UID,
-				DisplayName: user.Nickname,
-				PhotoUrl:    user.AvatarURL,
-				Email:       user.Email,
-				Gender:      user.Gender,
-				Bio:         user.Bio,
-			}
+			fmt.Printf("old session: %+v\n", session)
+			session.UID = user.UID
+			session.DisplayName = user.Nickname
+			session.PhotoUrl = user.AvatarURL
+			session.Email = user.Email
+			session.Gender = user.Gender
+			session.Bio = user.Bio
 
 		}
 		return user, nil

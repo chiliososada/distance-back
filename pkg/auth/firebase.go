@@ -199,7 +199,7 @@ func RevokeSession(ctx context.Context, uid string) error {
 	return firebaseAuth.RevokeRefreshTokens(ctx, uid)
 }
 
-func UpdateUserProfile(ctx context.Context, session *SessionData, request *request.UpdateProfileRequest) error {
+func UpdateUserProfile(ctx context.Context, uid string, request *request.UpdateProfileRequest) error {
 	var utu auth.UserToUpdate
 	if request.Nickname != nil {
 		utu = *utu.DisplayName(*request.Nickname)
@@ -213,21 +213,7 @@ func UpdateUserProfile(ctx context.Context, session *SessionData, request *reque
 		return nil
 	}
 
-	rec, err := firebaseAuth.UpdateUser(ctx, session.UID, &utu)
-	if err == nil {
-
-		*session = SessionData{
-			CsrfToken:   session.CsrfToken,
-			UID:         rec.UID,
-			DisplayName: rec.DisplayName,
-			PhotoUrl:    rec.PhotoURL,
-			Email:       rec.Email,
-			Gender:      session.Gender,
-			Bio:         session.Bio,
-		}
-		return nil
-	} else {
-		return err
-	}
+	_, err := firebaseAuth.UpdateUser(ctx, uid, &utu)
+	return err
 
 }
