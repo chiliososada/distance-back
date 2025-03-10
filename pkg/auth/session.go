@@ -142,15 +142,19 @@ func setSessionData(c *gin.Context, uid string, value *SessionData) error {
 	}
 	result := cache.RedisClient.HSet(ctx, key, data)
 	if result.Err() != nil {
+		fmt.Printf("set session data failed: %+v\n", result.Err())
 		return result.Err()
 	} else {
 
 		if err := cache.RedisClient.Expire(ctx, key, SessionDuration).Err(); err != nil {
 			cache.RedisClient.Del(ctx, key)
 			return err
-		} else {
+		}
+
+		if len(value.ChatID) > 0 {
 			chatKey := userChatKey(uid)
 			if err := cache.RedisClient.SAdd(ctx, chatKey, value.ChatID).Err(); err != nil {
+				fmt.Printf("set chat key failed: %+v\n", err)
 				cache.RedisClient.Del(ctx, key)
 				return err
 			} else {
@@ -161,8 +165,9 @@ func setSessionData(c *gin.Context, uid string, value *SessionData) error {
 				}
 			}
 
-			return nil
 		}
+
+		return nil
 
 	}
 

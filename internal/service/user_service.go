@@ -30,23 +30,27 @@ func NewUserService(userRepo repository.UserRepository, storage storage.Storage)
 }
 
 // RegisterOrUpdateUser 注册或更新用户信息（Firebase认证后）
-func (s *UserService) RegisterOrUpdateUser(ctx context.Context, uid string, session *auth.SessionData, req *request.UpdateProfileRequest) error {
+func (s *UserService) RegisterOrUpdateUser(ctx context.Context, uid string, session *auth.SessionData, req *request.UpdateProfileRequest) (*model.User, error) {
 	user, err := s.userRepo.RegisterOrUpdateUser(ctx, uid, req)
 	if err != nil {
-		return err
+		return nil, err
 	} else {
 		//update session data
 
-		*session = auth.SessionData{
-			CsrfToken:   session.CsrfToken,
-			UID:         user.UID,
-			DisplayName: user.Nickname,
-			PhotoUrl:    user.AvatarURL,
-			Email:       user.Email,
-			Gender:      user.Gender,
-			Bio:         user.Bio,
+		if session != nil {
+
+			*session = auth.SessionData{
+				CsrfToken:   session.CsrfToken,
+				UID:         user.UID,
+				DisplayName: user.Nickname,
+				PhotoUrl:    user.AvatarURL,
+				Email:       user.Email,
+				Gender:      user.Gender,
+				Bio:         user.Bio,
+			}
+
 		}
-		return nil
+		return user, nil
 	}
 }
 
@@ -191,7 +195,7 @@ func (s *UserService) GetUserByUID(ctx context.Context, userUID string) (*model.
 		logger.Error("Failed to get user from db",
 			logger.String("uid", userUID),
 			logger.Any("error", err))
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, err
 	} else {
 		return user, nil
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func generateSecurityToken(cookie string) (string, error) {
@@ -86,6 +87,23 @@ func (h *Handler) LoginUser(c *gin.Context) {
 	}
 
 	userRecord, err := h.userService.GetUserByUID(ctx, user.UID)
+	fmt.Printf("error: %+v\n", err)
+
+	if err != nil && err == gorm.ErrRecordNotFound {
+		fmt.Printf("userRecord not found, register user\n")
+		req := request.UpdateProfileRequest{
+			Email: &user.Email,
+		}
+		userRecord, err = h.userService.RegisterOrUpdateUser(c, user.UID, nil, &req)
+		if err != nil {
+			Error(c, errors.ErrOperation)
+			return
+		}
+
+	} else if err != nil {
+		Error(c, errors.ErrOperation)
+		return
+	}
 
 	sessionData, err := auth.CreateUserSession(c, user.UID, cookie, csrfToken, chatToken, user, userRecord)
 	if err != nil {
@@ -298,7 +316,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 
 	//update database
-	err = h.userService.RegisterOrUpdateUser(c, uid, sessionData, &req)
+	_, err = h.userService.RegisterOrUpdateUser(c, uid, sessionData, &req)
 	if err != nil {
 		Error(c, errors.ErrUserProfileUpdateFailed)
 		return

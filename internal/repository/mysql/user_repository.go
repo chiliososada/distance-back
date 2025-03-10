@@ -49,10 +49,7 @@ func (r *userRepository) GetByUID(ctx context.Context, uid string) (*model.User,
 		First(&user)
 
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			logger.Info("User not found", logger.String("uid", uid))
-			return nil, nil
-		}
+
 		logger.Error("Failed to get user",
 			logger.String("uid", uid),
 			logger.Any("error", result.Error))
