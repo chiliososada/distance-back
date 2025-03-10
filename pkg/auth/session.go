@@ -189,6 +189,7 @@ func UpdateSessionData(c *gin.Context, uid string, newSession *SessionData) erro
 
 func CreateUserSession(c *gin.Context, uid string, session string, csrfToken string, chatToken string,
 	user *firebase_auth.UserRecord, userRecord *model.User) (*SessionData, error) {
+	fmt.Printf("firebase user: %+v\n", user.DisplayName)
 
 	gender := "unknown"
 	bio := ""
@@ -208,8 +209,8 @@ func CreateUserSession(c *gin.Context, uid string, session string, csrfToken str
 		CsrfToken:   csrfToken,
 		ChatToken:   chatToken,
 		UID:         uid,
-		DisplayName: user.DisplayName,
-		PhotoUrl:    user.PhotoURL,
+		DisplayName: userRecord.Nickname,
+		PhotoUrl:    userRecord.AvatarURL,
 		Email:       user.Email,
 		Gender:      gender,
 		Bio:         bio,

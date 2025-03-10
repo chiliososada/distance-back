@@ -61,6 +61,7 @@ func (h *Handler) LoginUser(c *gin.Context) {
 	}
 
 	user, err := auth.GetUserByUID(ctx, token.UID)
+	fmt.Printf("user: %+v\n", user)
 	if err != nil {
 		Error(c, errors.ErrAuthentication)
 		return
@@ -88,6 +89,7 @@ func (h *Handler) LoginUser(c *gin.Context) {
 
 	userRecord, err := h.userService.GetUserByUID(ctx, user.UID)
 	fmt.Printf("error: %+v\n", err)
+	fmt.Printf("userRecord: %+v\n", userRecord)
 
 	if err != nil && err == gorm.ErrRecordNotFound {
 		fmt.Printf("userRecord not found, register user\n")
@@ -111,6 +113,7 @@ func (h *Handler) LoginUser(c *gin.Context) {
 		Error(c, errors.ErrOperation)
 		return
 	}
+	fmt.Printf("sessionData: %+v\n", sessionData)
 
 	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
 
