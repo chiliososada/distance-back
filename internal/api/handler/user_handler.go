@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"crypto/rand"
 
@@ -17,6 +18,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type Chat struct {
+	ChatRoomUID string    `json:"chat_room_uid"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type SessionAndChats struct {
+	Chats   []Chat            `json:"chats"`
+	Session *auth.SessionData `json:"session"`
+}
 
 func generateSecurityToken(cookie string) (string, error) {
 
@@ -33,7 +44,21 @@ func (h *Handler) CheckSession(c *gin.Context) {
 
 	sessionData := auth.GetSessionFromContext(c)
 	fmt.Printf("sessionData: %+v\n", sessionData)
-	Success(c, sessionData)
+
+	ctx := c.Request.Context()
+
+	chats, err := h.chatService.ListRooms(ctx, sessionData.UID)
+	if err != nil {
+		Error(c, errors.ErrOperation)
+		return
+	}
+
+	chats_response := make([]Chat, len(chats))
+	for i, chat := range chats {
+		chats_response[i] = Chat{ChatRoomUID: chat.ChatRoomUID, ExpiresAt: chat.ExpiresAt}
+	}
+
+	Success(c, SessionAndChats{Chats: chats_response, Session: sessionData})
 
 }
 
@@ -115,9 +140,19 @@ func (h *Handler) LoginUser(c *gin.Context) {
 	}
 	//fmt.Printf("sessionData: %+v\n", sessionData)
 
+	chats, err := h.chatService.ListRooms(ctx, sessionData.UID)
+	if err != nil {
+		Error(c, errors.ErrOperation)
+		return
+	}
+
+	chats_response := make([]Chat, len(chats))
+	for i, chat := range chats {
+		chats_response[i] = Chat{ChatRoomUID: chat.ChatRoomUID, ExpiresAt: chat.ExpiresAt}
+	}
 	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
 
-	Success(c, sessionData)
+	Success(c, SessionAndChats{Chats: chats_response, Session: sessionData})
 	return
 
 }

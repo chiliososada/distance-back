@@ -41,7 +41,7 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 		return
 	}
 	//fmt.Printf("uid:%v, req: %+v\n", userUID, req)
-	fmt.Printf("req: %+v\n", req)
+	//fmt.Printf("req: %+v\n", req)
 
 	// 创建话题
 	createdTopic, err := h.topicService.CreateTopic(c.Request.Context(), userUID, &req)
@@ -52,17 +52,19 @@ func (h *Handler) CreateTopic(c *gin.Context) {
 		Error(c, errors.ErrOperation.WithStatus(http.StatusBadRequest).WithDetails(err.Error()))
 		return
 	}
-	fmt.Printf("createdTopic: %+v\n", createdTopic)
+	//fmt.Printf("createdTopic: %+v\n", createdTopic)
 
-	//update user session
-	sessionData.ChatID = append(sessionData.ChatID, createdTopic.ChatRoom.UID)
-	if err := auth.UpdateSessionData(c, userUID, sessionData); err != nil {
-		logger.Error("Failed to update user session",
-			logger.String("path", c.Request.URL.Path),
-			logger.Any("error", err))
-		Error(c, errors.ErrOperation.WithDetails(err.Error()))
-		return
-	}
+	/*
+		//update user session
+		sessionData.ChatID = append(sessionData.ChatID, createdTopic.ChatRoom.UID)
+		if err := auth.UpdateSessionData(c, userUID, sessionData); err != nil {
+			logger.Error("Failed to update user session",
+				logger.String("path", c.Request.URL.Path),
+				logger.Any("error", err))
+			Error(c, errors.ErrOperation.WithDetails(err.Error()))
+			return
+		}
+	*/
 
 	cachedTopic := createdTopic.CastToCached()
 

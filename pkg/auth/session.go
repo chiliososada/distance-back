@@ -88,17 +88,17 @@ func sessionDataDecodeHook(from reflect.Type, to reflect.Type, data interface{})
 }
 
 type SessionData struct {
-	CsrfToken   string   `mapstructure:"csrf_token" json:"csrf_token"`
-	ChatToken   string   `mapstructure:"chat_token" json:"chat_token"`
-	UID         string   `mapstructure:"uid" json:"uid"`
-	DisplayName string   `mapstructure:"display_name" json:"display_name"`
-	PhotoUrl    string   `mapstructure:"photo_url" json:"photo_url"`
-	Email       string   `mapstructure:"email" json:"email"`
-	Gender      string   `mapstructure:"gender" json:"gender"`
-	Bio         string   `mapstructure:"bio" json:"bio"`
-	Session     string   `mapstructure:"session" json:"-"`
-	ChatID      []string `mapstructure:"-" json:"chat_id"`
-	ChatUrl     string   `mapstructure:"chat_url" json:"chat_url"`
+	CsrfToken   string `mapstructure:"csrf_token" json:"csrf_token"`
+	ChatToken   string `mapstructure:"chat_token" json:"chat_token"`
+	UID         string `mapstructure:"uid" json:"uid"`
+	DisplayName string `mapstructure:"display_name" json:"display_name"`
+	PhotoUrl    string `mapstructure:"photo_url" json:"photo_url"`
+	Email       string `mapstructure:"email" json:"email"`
+	Gender      string `mapstructure:"gender" json:"gender"`
+	Bio         string `mapstructure:"bio" json:"bio"`
+	Session     string `mapstructure:"session" json:"-"`
+	//ChatID      []string `mapstructure:"-" json:"chat_id"`
+	ChatUrl string `mapstructure:"chat_url" json:"chat_url"`
 }
 
 func getChatUrl(_ string) string {
@@ -153,21 +153,23 @@ func setSessionData(c *gin.Context, uid string, value *SessionData) error {
 			return err
 		}
 
-		if len(value.ChatID) > 0 {
-			chatKey := userChatKey(uid)
-			if err := cache.RedisClient.SAdd(ctx, chatKey, value.ChatID).Err(); err != nil {
-				fmt.Printf("set chat key failed: %+v\n", err)
-				cache.RedisClient.Del(ctx, key)
-				return err
-			} else {
-				if err := cache.RedisClient.Expire(ctx, chatKey, SessionDuration).Err(); err != nil {
+		/*
+			if len(value.ChatID) > 0 {
+				chatKey := userChatKey(uid)
+				if err := cache.RedisClient.SAdd(ctx, chatKey, value.ChatID).Err(); err != nil {
+					fmt.Printf("set chat key failed: %+v\n", err)
 					cache.RedisClient.Del(ctx, key)
-					cache.RedisClient.Del(ctx, chatKey)
 					return err
+				} else {
+					if err := cache.RedisClient.Expire(ctx, chatKey, SessionDuration).Err(); err != nil {
+						cache.RedisClient.Del(ctx, key)
+						cache.RedisClient.Del(ctx, chatKey)
+						return err
+					}
 				}
-			}
 
-		}
+			}
+		*/
 
 		return nil
 
@@ -219,8 +221,8 @@ func CreateUserSession(c *gin.Context, uid string, session string, csrfToken str
 		Gender:      gender,
 		Bio:         bio,
 		Session:     session,
-		ChatID:      chatID,
-		ChatUrl:     getChatUrl(uid),
+		//ChatID:      chatID,
+		ChatUrl: getChatUrl(uid),
 	}
 
 	err := setSessionData(c, uid, &sd)
@@ -295,15 +297,17 @@ func SetSessionDataInContext(c *gin.Context, uid string, session string) error {
 		if err := decoder.Decode(result.Val()); err != nil {
 			return err
 		} else {
-			//read chat id
-			chatKey := userChatKey(uid)
-			chatID, err := cache.RedisClient.SMembers(c.Request.Context(), chatKey).Result()
-			if err != nil && err != redis.Nil {
-				return err
-			} else if err != redis.Nil {
-				sd.ChatID = chatID
-			} else {
-			}
+			/*
+				//read chat id
+				chatKey := userChatKey(uid)
+				chatID, err := cache.RedisClient.SMembers(c.Request.Context(), chatKey).Result()
+				if err != nil && err != redis.Nil {
+					return err
+				} else if err != redis.Nil {
+					sd.ChatID = chatID
+				} else {
+				}
+			*/
 			//store session data in context
 			c.Set("session", sd)
 			return nil

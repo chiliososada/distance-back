@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/api/response"
 	"github.com/chiliososada/distance-back/internal/model"
@@ -705,29 +708,22 @@ func (h *Handler) GetRoomInfo(c *gin.Context) {
 // @Failure 400,401 {object} response.Response "错误详情"
 // @Router /api/v1/chats [get]
 func (h *Handler) ListRooms(c *gin.Context) {
-	userUID := h.GetCurrentUserUID(c)
-	if userUID == "" {
-		Error(c, errors.ErrUnauthorized)
-		return
-	}
+	// 1. 身份验证
+	sessionData := auth.GetSessionFromContext(c)
 
-	var req request.ListRoomsRequest
-	if err := BindQuery(c, &req); err != nil {
-		Error(c, err)
-		return
-	}
+	userUID := sessionData.UID
 
-	rooms, total, err := h.chatService.ListUserRooms(c.Request.Context(), userUID, req.Page, req.Size)
+	chats, err := h.chatService.ListRooms(c.Request.Context(), userUID)
 	if err != nil {
-		logger.Error("获取聊天室列表失败",
-			logger.String("path", c.Request.URL.Path),
-			logger.Any("error", err),
-			logger.String("user_uid", userUID))
 		Error(c, err)
 		return
 	}
+	for _, chat := range chats {
+		fmt.Printf("expires_at %v\n", chat.ExpiresAt)
+		fmt.Printf("expires_at UTC %v\n", chat.ExpiresAt.UTC())
+	}
+	Success(c, chats)
 
-	Success(c, response.ToChatRoomListResponse(rooms, total, req.Page, req.Size))
 }
 
 // UpdateMember 更新成员信息
@@ -841,9 +837,17 @@ func (h *Handler) JoinRoom(c *gin.Context) {
 	}
 
 	//update db
-	h.chatService.JoinRoom(c.Request.Context(), userUID, req.RoomUID)
+	if expiresAt, err := h.chatService.JoinRoom(c.Request.Context(), userUID, req.RoomUID, req.TopicUID); err != nil {
+		Error(c, err)
+		return
+	} else {
+
+		Success(c, struct {
+			ExpiresAt time.Time `json:"expires_at"`
+		}{ExpiresAt: expiresAt})
+		return
+	}
 
 	//update session
 
-	Success(c, nil)
 }

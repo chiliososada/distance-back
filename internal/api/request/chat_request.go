@@ -1,7 +1,5 @@
 package request
 
-import "time"
-
 // CreateGroupRequest 创建群聊请求
 type CreateGroupRequest struct {
 	Name     string `json:"name" binding:"required,min=1,max=100"`
@@ -96,6 +94,6 @@ type SearchMessagesRequest struct {
 
 // JoinRoomRequest 置顶聊天室请求
 type JoinRoomRequest struct {
-	RoomUID   string    `json:"chat_room_uid" binding:"required"`
-	ExpiresAt time.Time `json:"expires_at" binding:"required"`
+	RoomUID  string `json:"chat_room_uid" binding:"required"`
+	TopicUID string `json:"topic_uid" binding:"required"`
 }

@@ -119,6 +119,7 @@ func SetupRouter(h *handler.Handler) *gin.Engine {
 		// 聊天相关路由
 		chats := authenticated.Group("/chats")
 		{
+			chats.GET("/list", h.ListRooms)
 			chats.POST("/join", h.JoinRoom)
 			/*
 				// 聊天室管理

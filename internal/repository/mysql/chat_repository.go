@@ -102,6 +102,16 @@ func (r *chatRepository) ListUserRooms(ctx context.Context, userUID string, offs
 	return rooms, total, nil
 }
 
+func (r *chatRepository) ListUserChats(ctx context.Context, userUID string) ([]*model.UserChat, error) {
+	var userChats []*model.UserChat
+	err := r.db.WithContext(ctx).
+		Select("user_uid,chat_room_uid,expires_at").
+		Where("user_uid = ?", userUID).
+		Where("expires_at > ?", time.Now().UTC()).
+		Find(&userChats).Error
+	return userChats, err
+}
+
 // AddMember 添加聊天室成员
 func (r *chatRepository) AddMember(ctx context.Context, member *model.ChatRoomMember) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -322,4 +332,40 @@ func (r *chatRepository) SoftDeleteTopicAndRoom(ctx context.Context, topicUID, r
 		}
 		return nil
 	})
+}
+
+func (r *chatRepository) JoinRoom(ctx context.Context, userUID, roomUID, topicUID string) (time.Time, error) {
+
+	expiresAt := time.Time{}
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+
+		var topic model.Topic
+		err := tx.Where("uid = ?", topicUID).Select("uid,expires_at").First(&topic).Error
+		if err != nil {
+			return err
+		}
+
+		var room model.ChatRoom
+		err = tx.Where("uid = ? AND topic_uid = ?", roomUID, topicUID).Select("uid, topic_uid").First(&room).Error
+		if err != nil {
+			return err
+		}
+
+		member := model.UserChat{
+			UserUID:     userUID,
+			ChatRoomUID: room.UID,
+			ExpiresAt:   topic.ExpiresAt,
+		}
+
+		err = tx.Create(&member).Error
+		if err != nil {
+			return err
+		} else {
+			expiresAt = topic.ExpiresAt
+			return nil
+
+		}
+
+	})
+	return expiresAt, err
 }

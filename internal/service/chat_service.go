@@ -645,16 +645,13 @@ func (s *ChatService) findPrivateRoom(ctx context.Context, userUID1, userUID2 st
 	return s.chatRepo.FindPrivateRoom(ctx, userUID1, userUID2)
 }
 
+func (s *ChatService) ListRooms(ctx context.Context, userUID string) ([]*model.UserChat, error) {
+	return s.chatRepo.ListUserChats(ctx, userUID)
+}
+
 // JoinRoom 加入群聊
-func (s *ChatService) JoinRoom(ctx context.Context, userUID string, roomUID string) error {
+func (s *ChatService) JoinRoom(ctx context.Context, userUID string, roomUID string, topicUID string) (time.Time, error) {
 
-	/*
-		model := model.UserChat{
-			UserUID:     userUID,
-			ChatRoomUID: roomUID,
-		}
+	return s.chatRepo.JoinRoom(ctx, userUID, roomUID, topicUID)
 
-		return s.chatRepo.AddMember(ctx, member)
-	*/
-	return nil
 }
