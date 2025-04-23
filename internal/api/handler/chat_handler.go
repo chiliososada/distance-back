@@ -7,6 +7,7 @@ import (
 
 	"github.com/chiliososada/distance-back/internal/service"
 
+	"github.com/chiliososada/distance-back/pkg/auth"
 	"github.com/chiliososada/distance-back/pkg/errors"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -825,30 +826,24 @@ func (h *Handler) LeaveRoom(c *gin.Context) {
 
 // JoinRoom 加入群聊
 func (h *Handler) JoinRoom(c *gin.Context) {
-	userUID := h.GetCurrentUserUID(c)
-	if userUID == "" {
-		Error(c, errors.ErrUnauthorized)
+	// 1. 身份验证
+	sessionData := auth.GetSessionFromContext(c)
+
+	userUID := sessionData.UID
+
+	// 2. 参数验证
+	var req request.JoinRoomRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Error("Invalid join room request",
+			logger.Any("error", err))
+		Error(c, errors.ErrValidation.WithDetails(err.Error()))
 		return
 	}
 
-	roomUID, err := ParseUUID(c, "id")
-	if err != nil {
-		Error(c, err)
-		return
-	}
+	//update db
+	h.chatService.JoinRoom(c.Request.Context(), userUID, req.RoomUID)
 
-	// 获取用户信息
-	user, err := h.userService.GetUserByUID(c.Request.Context(), userUID)
-	if err != nil {
-		Error(c, err)
-		return
-	}
-
-	// 注意这里的参数顺序要和 service 层方法定义的一致
-	if err := h.chatService.JoinRoom(c.Request.Context(), userUID, user.Nickname, roomUID); err != nil {
-		Error(c, err)
-		return
-	}
+	//update session
 
 	Success(c, nil)
 }

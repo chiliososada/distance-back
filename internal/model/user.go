@@ -147,8 +147,9 @@ type UserBan struct {
 
 type UserChat struct {
 	BaseModel
-	UserUID     string   `gorm:"type:varchar(36);uniqueIndex" json:"user_uid"`
-	ChatRoomUID string   `gorm:"type:varchar(36);index" json:"chat_room_uid"`
-	User        User     `gorm:"foreignKey:UserUID;references:UID" json:"user"`
-	ChatRoom    ChatRoom `gorm:"foreignKey:ChatRoomUID;references:UID" json:"chat_room"`
+	UserUID     string    `gorm:"type:varchar(36);index" json:"user_uid"`
+	ChatRoomUID string    `gorm:"type:varchar(36);index" json:"chat_room_uid"`
+	User        User      `gorm:"foreignKey:UserUID;references:UID" json:"user"`
+	ChatRoom    ChatRoom  `gorm:"foreignKey:ChatRoomUID;references:UID" json:"chat_room"`
+	ExpiresAt   time.Time `gorm:"type:timestamp" json:"expires_at"`
 }

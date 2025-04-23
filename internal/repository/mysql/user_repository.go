@@ -42,7 +42,7 @@ func (r *userRepository) GetByUID(ctx context.Context, uid string) (*model.User,
 
 	var user model.User
 	result := r.db.WithContext(ctx).Preload("Chat", func(db *gorm.DB) *gorm.DB {
-		return db.Select("chat_room_uid,user_uid")
+		return db.Select("chat_room_uid,user_uid").Where("expires_at > ?", time.Now().UTC())
 	}).
 		// Debug(). // 添加这行来看SQL日志
 		Where("uid = ?", uid).

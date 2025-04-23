@@ -56,6 +56,12 @@ func (s *TopicService) FindTopicBy(c *gin.Context, by request.FindTopicsByReques
 
 }
 
+func (s *TopicService) FindAllTopics(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error) {
+
+	return s.topicRepo.FindAllTopics(c, by)
+
+}
+
 // UpdateTopic 更新话题
 func (s *TopicService) UpdateTopic(
 	ctx context.Context,

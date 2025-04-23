@@ -113,7 +113,7 @@ func (h *Handler) LoginUser(c *gin.Context) {
 		Error(c, errors.ErrOperation)
 		return
 	}
-	fmt.Printf("sessionData: %+v\n", sessionData)
+	//fmt.Printf("sessionData: %+v\n", sessionData)
 
 	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
 

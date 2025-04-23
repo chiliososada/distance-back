@@ -10,6 +10,7 @@ import (
 	"github.com/chiliososada/distance-back/internal/api/request"
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
+	"github.com/chiliososada/distance-back/internal/util"
 	"github.com/chiliososada/distance-back/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -450,9 +451,12 @@ func (r *topicRepository) BatchCreate(ctx context.Context, tags []string) ([]str
 }
 
 func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, req *request.CreateTopicRequest) (*model.Topic, error) {
-	var topic model.Topic
+	var topic_uid string
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var topic model.Topic
 		//create an empty topic to lock the topic id
+		expAt := util.RoundToNextTokyoMidnight(req.ExpiresAt)
+		//fmt.Printf("expAt: %v\n", expAt)
 		if result := tx.Model(&model.Topic{}).Where("uid = ?", req.Uid).
 			FirstOrCreate(&topic, model.Topic{
 				BaseModel:         model.BaseModel{UID: req.Uid},
@@ -461,7 +465,7 @@ func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, re
 				Content:           req.Content,
 				LocationLatitude:  req.Latitude,
 				LocationLongitude: req.Longitude,
-				ExpiresAt:         req.ExpiresAt}); result.Error != nil {
+				ExpiresAt:         expAt}); result.Error != nil {
 			return result.Error
 		} else if result.RowsAffected == 0 {
 			//topic exists
@@ -521,6 +525,7 @@ func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, re
 			}
 		}
 
+		//create chat room for topic
 		chatRoom := model.ChatRoom{
 			BaseModel: model.BaseModel{
 				UID: uuid.New().String(),
@@ -533,6 +538,18 @@ func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, re
 			return fmt.Errorf("create chat room for topic %v failed dueto %v", topic.UID, result.Error)
 		}
 
+		//create user - chat relation
+		userChat := model.UserChat{
+			UserUID:     userUID,
+			ChatRoomUID: chatRoom.UID,
+			ExpiresAt:   expAt,
+		}
+		if result := tx.Create(&userChat); result.Error != nil {
+			return fmt.Errorf("create user-chat relation for topic %v failed due to %v", topic.UID, result.Error)
+		}
+
+		topic_uid = topic.UID
+
 		return nil
 	})
 
@@ -543,6 +560,24 @@ func (r *topicRepository) CreateNewTopic(ctx context.Context, userUID string, re
 		if updated == RecentTopicCacheThreshold {
 			r.postedTopicCounter.Store(int64(0))
 			go r.recentTopicCache.ReLoad(ctx)
+		}
+
+		//reload the created topic
+		var topic model.Topic
+		if err := r.db.WithContext(ctx).
+			Preload("Tags", func(db *gorm.DB) *gorm.DB {
+				return db.Select("tags.uid, tags.name")
+			}).Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("users.uid, users.nickname, users.avatar_url")
+		}).
+			Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
+				return db.Select("topic_images.uid, topic_images.image_url,topic_images.topic_uid")
+			}).
+			Preload("ChatRoom", func(db *gorm.DB) *gorm.DB {
+				return db.Select("chat_rooms.uid, chat_rooms.topic_uid")
+			}).
+			Where("topics.uid = ?", topic_uid).First(&topic).Error; err != nil {
+			return nil, err
 		}
 		return &topic, nil
 	}
@@ -580,6 +615,46 @@ func (r *topicRepository) findTopicsByRecency(c *gin.Context, count int, before 
 
 func (r *topicRepository) findTopicsByPopularity(c *gin.Context, count int) ([]*model.CachedTopic, int, error) {
 	return nil, 0, nil
+}
+
+func (r *topicRepository) FindAllTopics(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error) {
+	var topics []*model.Topic
+
+	updated_at := time.Now()
+	if by.RecencyScore != 0 {
+		updated_at = time.Unix(int64(by.RecencyScore), 0)
+	}
+	err := r.db.WithContext(c.Request.Context()).
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("users.uid, users.nickname, users.avatar_url")
+		}).
+		Preload("TopicImages", func(db *gorm.DB) *gorm.DB {
+			return db.Select("topic_images.uid, topic_images.image_url,topic_images.topic_uid")
+		}).
+		Preload("Tags", func(db *gorm.DB) *gorm.DB {
+			return db.Select("tags.uid, tags.name")
+		}).
+		Preload("ChatRoom", func(db *gorm.DB) *gorm.DB {
+			return db.Select("chat_rooms.uid, chat_rooms.topic_uid")
+		}).
+		Where("expires_at > ?", time.Now()).
+		Where("updated_at < ?", updated_at).
+		Order("updated_at DESC").
+		Find(&topics).Error
+	if err != nil {
+		return nil, by.RecencyScore, err
+	}
+
+	cachedTopics := []*model.CachedTopic{}
+	for _, topic := range topics {
+		cachedTopic := topic.CastToCached()
+		cachedTopics = append(cachedTopics, &cachedTopic)
+	}
+	last_updated_at := by.RecencyScore
+	if len(topics) > 0 {
+		last_updated_at = int(topics[len(topics)-1].UpdatedAt.Unix())
+	}
+	return cachedTopics, int(last_updated_at), nil
 }
 
 // ListPopular 获取热门标签

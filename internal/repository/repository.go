@@ -47,7 +47,7 @@ type UserRepository interface {
 type TopicRepository interface {
 	CreateNewTopic(ctx context.Context, userUID string, req *request.CreateTopicRequest) (*model.Topic, error)
 	FindTopicsBy(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error)
-
+	FindAllTopics(c *gin.Context, by request.FindTopicsByRequest) ([]*model.CachedTopic, int, error)
 	// 基础操作
 	Update(ctx context.Context, topic *model.Topic) error
 	Delete(ctx context.Context, uid string) error
