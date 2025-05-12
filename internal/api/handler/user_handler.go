@@ -150,7 +150,7 @@ func (h *Handler) LoginUser(c *gin.Context) {
 	for i, chat := range chats {
 		chats_response[i] = Chat{ChatRoomUID: chat.ChatRoomUID, ExpiresAt: chat.ExpiresAt}
 	}
-	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/; Domain=192.168.0.143; HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
+	c.Header("Set-Cookie", fmt.Sprintf("Authorization=%s; Max-Age=%d; Path=/;  HttpOnly;Secure; SameSite=None", cookie, int(math.Floor(float64(auth.SessionDuration.Seconds())))))
 
 	Success(c, SessionAndChats{Chats: chats_response, Session: sessionData})
 	return

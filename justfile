@@ -6,7 +6,7 @@ initdb:
         --network distance \
         -p 52342:3306 \
         -v /var/distance_mysql_dev:/var/lib/mysql \
-        -v /home/ty001/distance-back/scripts/mysql:/docker-entrypoint-initdb.d \
+        #-v /home/ty001/distance-back/scripts/mysql:/docker-entrypoint-initdb.d \
         -e  MYSQL_ROOT_PASSWORD=my-secret-pw \
         mysql:latest
 

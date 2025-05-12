@@ -8,7 +8,7 @@ app:
   max_header_bytes: 1048576  # 1MB
 
 mysql:
-  host: "localhost"
+  host: hpe1.toyousoft.co.jp
   port: 3306
   user: "root"
   password: "your_password"DistanceBack_v1
@@ -17,7 +17,7 @@ mysql:
   max_open_conns: 100
 
 redis:
-  host: "localhost"
+  host: hpe1.toyousoft.co.jp
   port: 6379
   password: ""
   db: 0

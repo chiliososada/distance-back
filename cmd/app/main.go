@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -48,6 +50,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	usr, err := user.Current()
+	if err != nil {
+		logger.Error("Failed to get user home directory", logger.Any("error", err))
+		os.Exit(1)
+	}
+
+	certFile := filepath.Join(usr.HomeDir, "certificates/dev/hpe1.crt")
+	keyFile := filepath.Join(usr.HomeDir, "certificates/dev/hpe1.key")
 
 	// 2. 初始化日志
 	logger.InitLogger(&logger.Options{
@@ -132,7 +143,7 @@ func main() {
 			logger.String("addr", srv.Addr),
 			logger.String("mode", cfg.App.Mode))
 
-		if err := srv.ListenAndServeTLS("/Users/ziyuanliu/certificates/dev/lsw-dev.crt", "/Users/ziyuanliu/certificates/dev/lsw-dev.key"); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
 			logger.Error("Server failed to start", logger.Any("error", err))
 			os.Exit(1)
 		}

@@ -7,14 +7,14 @@ app:
   max_header_bytes: 1048576
 
 mysql:
-  host: "192.168.0.213"
+  host: hpe1.toyousoft.co.jp
   port: 52342
   user: "distance_user"
   password: "distance_password"
   dbname: "distance_back"
 
 redis:
-  host: 192.168.0.213
+  host: hpe1.toyousoft.co.jp
   port: 52343
   password: "distance_redis_password"
   db: 0

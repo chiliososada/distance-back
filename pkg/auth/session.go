@@ -102,7 +102,7 @@ type SessionData struct {
 }
 
 func getChatUrl(_ string) string {
-	return "https://192.168.0.213:55372/ws/distance"
+	return "https://hpe1.toyousoft.co.jp:55372/ws/distance"
 }
 
 type SessionRecentTopicCursor struct {
