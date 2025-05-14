@@ -19,7 +19,8 @@ type Config struct {
 type AppConfig struct {
 	Name           string        `mapstructure:"name"`
 	Mode           string        `mapstructure:"mode"`
-	Port           int           `mapstructure:"port"`
+	HttpsPort      int           `mapstructure:"https_port"`
+	HttpPort       int           `mapstructure:"http_port"`
 	ReadTimeout    time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout   time.Duration `mapstructure:"write_timeout"`
 	MaxHeaderBytes int           `mapstructure:"max_header_bytes"`

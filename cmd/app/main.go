@@ -57,8 +57,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	certFile := filepath.Join(usr.HomeDir, "certificates/dev/hpe1.crt")
-	keyFile := filepath.Join(usr.HomeDir, "certificates/dev/hpe1.key")
+	certFile := filepath.Join(usr.HomeDir, "certificates/dev/dev.crt")
+	keyFile := filepath.Join(usr.HomeDir, "certificates/dev/dev.key")
 
 	// 2. 初始化日志
 	logger.InitLogger(&logger.Options{
@@ -128,7 +128,7 @@ func main() {
 
 	// 11. 创建HTTP服务器
 	srv := &http.Server{
-		Addr:           fmt.Sprintf("0.0.0.0:%d", cfg.App.Port),
+		Addr:           fmt.Sprintf("0.0.0.0:%d", cfg.App.HttpsPort),
 		Handler:        r,
 		ReadTimeout:    cfg.App.ReadTimeout,
 		WriteTimeout:   cfg.App.WriteTimeout,
@@ -139,7 +139,7 @@ func main() {
 
 	go func() {
 
-		logger.Info("Server is starting",
+		logger.Info("HTTPS Server is starting",
 			logger.String("addr", srv.Addr),
 			logger.String("mode", cfg.App.Mode))
 
@@ -149,6 +149,30 @@ func main() {
 		}
 
 	}()
+
+	/*
+		//http server
+		go func() {
+			// 11. 创建HTTP服务器
+			httpSrv := &http.Server{
+				Addr:           fmt.Sprintf("0.0.0.0:%d", cfg.App.HttpPort),
+				Handler:        r,
+				ReadTimeout:    cfg.App.ReadTimeout,
+				WriteTimeout:   cfg.App.WriteTimeout,
+				MaxHeaderBytes: cfg.App.MaxHeaderBytes,
+			}
+
+			logger.Info("HTTP Server is starting",
+				logger.String("addr", httpSrv.Addr),
+				logger.String("mode", cfg.App.Mode))
+
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("Server failed to start", logger.Any("error", err))
+				os.Exit(1)
+			}
+
+		}()
+	*/
 
 	// 13. 优雅关闭
 	quit := make(chan os.Signal, 1)
