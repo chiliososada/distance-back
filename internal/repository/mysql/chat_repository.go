@@ -2,11 +2,12 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/chiliososada/distance-back/internal/model"
 	"github.com/chiliososada/distance-back/internal/repository"
-
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -340,7 +341,7 @@ func (r *chatRepository) JoinRoom(ctx context.Context, userUID, roomUID, topicUI
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 		var topic model.Topic
-		err := tx.Where("uid = ?", topicUID).Select("uid,expires_at").First(&topic).Error
+		err := tx.Where("uid = ? AND expires_at > ?", topicUID, time.Now().UTC()).Select("uid,expires_at").First(&topic).Error
 		if err != nil {
 			return err
 		}
@@ -359,7 +360,15 @@ func (r *chatRepository) JoinRoom(ctx context.Context, userUID, roomUID, topicUI
 
 		err = tx.Create(&member).Error
 		if err != nil {
-			return err
+
+			var mysqlErr *mysql.MySQLError
+			if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+				expiresAt = topic.ExpiresAt
+				return nil
+			} else {
+				return err
+			}
+
 		} else {
 			expiresAt = topic.ExpiresAt
 			return nil
